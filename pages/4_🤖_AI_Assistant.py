@@ -285,4 +285,4 @@ if st.session_state.chat_messages:
 # Footer
 st.divider()
 st.caption("🤖 AI Assistant powered by Google Gemini | Multi-Domain Intelligence Platform")
-st.caption(f"Session: {st.session_state.username} | Role: {user.get_role_display_name()}")
+st.caption(f"Session: {st.session_state.username} | Role: {user.get_role_display_name()}") 

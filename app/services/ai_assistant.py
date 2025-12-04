@@ -1,249 +1,177 @@
-"""
-AI Assistant Service
-Provides domain-specific AI analysis using OpenAI's GPT models
-"""
+"""AI assistant service using Google Gemini"""
 
-from openai import OpenAI
+import google.generativeai as genai
 from typing import List, Dict, Optional
 
 
 class AIAssistant:
-    """
-    Wrapper for OpenAI API with domain-specific system prompts.
-    
-    Provides specialised AI assistance for Cybersecurity, Data Science,
-    and Operations domains with context-aware responses.
-    """
+    """Wrapper for Gemini API with domain-specific prompts"""
     
     # Domain-specific system prompts
     DOMAIN_PROMPTS = {
-        "cybersecurity": """You are a cybersecurity expert assistant for a Multi-Domain Intelligence Platform.
-
-Your responsibilities:
-- Analyse security incidents and provide technical assessments
-- Explain attack vectors, vulnerabilities, and threat actors
-- Recommend mitigation strategies following industry standards (NIST, ISO 27001, MITRE ATT&CK)
-- Provide actionable security recommendations
-- Use professional terminology appropriate for security analysts
-
-Tone: Professional, technical, and precise
-Format: Clear, structured responses with bullet points for recommendations""",
+        "cybersecurity": """You are a cybersecurity expert for a Multi-Domain Intelligence Platform.
+Analyse security incidents, explain attack vectors, and provide NIST/MITRE ATT&CK recommendations.
+Use professional terminology. Format: Clear, structured responses with bullet points.""",
         
-        "datascience": """You are a data science expert assistant for a Multi-Domain Intelligence Platform.
-
-Your responsibilities:
-- Analyse dataset characteristics and provide insights
-- Recommend appropriate data processing and analysis techniques
-- Explain statistical methods and machine learning approaches
-- Suggest data visualisation strategies
-- Help troubleshoot data quality issues
-
-Tone: Professional and educational
-Format: Clear explanations with practical examples""",
+        "datascience": """You are a data science expert for a Multi-Domain Intelligence Platform.
+Analyse datasets, recommend techniques, explain statistical methods, and suggest visualisations.
+Use professional tone. Format: Clear explanations with practical examples.""",
         
-        "itoperations": """You are an IT operations expert assistant for a Multi-Domain Intelligence Platform.
-
-Your responsibilities:
-- Troubleshoot IT issues and provide technical solutions
-- Recommend best practices for system administration
-- Explain infrastructure concepts and technologies
-- Provide step-by-step resolution guides
-- Prioritise urgent issues and suggest preventive measures
-
-Tone: Professional and solution-oriented
-Format: Clear, actionable steps with explanations""",
+        "itoperations": """You are an IT operations expert for a Multi-Domain Intelligence Platform.
+Troubleshoot issues, recommend best practices, and provide step-by-step resolution guides.
+Use solution-oriented tone. Format: Clear, actionable steps with explanations.""",
         
-        "general": """You are a helpful assistant for a Multi-Domain Intelligence Platform covering Cybersecurity, Data Science, and IT Operations.
-
-Provide professional, accurate, and actionable advice across these domains."""
+        "general": """You are a helpful assistant for a Multi-Domain Intelligence Platform.
+Provide professional, accurate advice across Cybersecurity, Data Science, and IT Operations."""
     }
     
-    def __init__(self, api_key: str, default_model: str = "gpt-4o-mini"):
-
-        """
-        Initialise the AIAssistant with OpenAI credentials.
+    def __init__(self, api_key: str, default_model: str = "gemini-1.5-flash"):
+        """Initialise Gemini AI assistant"""
+        genai.configure(api_key=api_key)
         
-        Args:
-            api_key: OpenAI API key
-            default_model: GPT model to use (default: 'gpt-4o')
-        """
-        self._client = OpenAI(api_key=api_key)
-        self._model = default_model
+        # Generation configuration
+        self._generation_config = {
+            "temperature": 1.0,
+            "top_p": 0.95,
+            "top_k": 40,
+            "max_output_tokens": 8192,
+        }
+        
+        self._model_name = default_model
         self._current_domain = "general"
         self._conversation_history: List[Dict[str, str]] = []
         self._system_prompt = self.DOMAIN_PROMPTS["general"]
+        
+        # Initialise model
+        self._initialize_model()
+    
+    def _initialize_model(self):
+        """Create Gemini model with system instruction"""
+        self._model = genai.GenerativeModel(
+            model_name=self._model_name,
+            generation_config=self._generation_config,
+            system_instruction=self._system_prompt
+        )
+        self._chat = self._model.start_chat(history=[])
     
     def set_domain(self, domain: str) -> None:
-        """
-        Set the AI domain context for specialised responses.
-        
-        Args:
-            domain: Domain name ('cybersecurity', 'datascience', 'itoperations', or 'general')
-        """
+        """Set AI domain context for specialised responses"""
         domain_lower = domain.lower()
         if domain_lower in self.DOMAIN_PROMPTS:
             self._current_domain = domain_lower
             self._system_prompt = self.DOMAIN_PROMPTS[domain_lower]
-            print(f"🤖 AI Assistant domain set to: {domain}")
+            self._initialize_model()  # Reinitialise with new prompt
         else:
-            print(f"⚠️ Unknown domain '{domain}', using 'general' instead")
             self._current_domain = "general"
             self._system_prompt = self.DOMAIN_PROMPTS["general"]
+            self._initialize_model()
     
     def get_current_domain(self) -> str:
-        """Return the currently active domain."""
+        """Return currently active domain"""
         return self._current_domain
     
     def clear_conversation(self) -> None:
-        """Clear the conversation history to start fresh."""
+        """Clear conversation history"""
         self._conversation_history = []
-        print("🧹 Conversation history cleared")
+        self._chat = self._model.start_chat(history=[])
     
-    def send_message(
-        self, 
-        user_message: str,
-        context: Optional[str] = None,
-        stream: bool = False
-    ) -> str:
-        """
-        Send a message to the AI and get a response.
-        
-        Args:
-            user_message: The user's question or request
-            context: Optional additional context (e.g., incident details)
-            stream: Whether to stream the response (for Streamlit UI)
-            
-        Returns:
-            The AI's response as a string
-            
-        Example:
-            response = ai.send_message(
-                "What is a phishing attack?",
-                context="User reported suspicious email with urgent payment request"
-            )
-        """
-        # Build the full message with context if provided
+    def send_message(self, user_message: str, context: Optional[str] = None, stream: bool = False):
+        """Send message to AI and get response"""
+        # Build full message with context
         full_message = user_message
         if context:
             full_message = f"{user_message}\n\nContext:\n{context}"
         
-        # Add user message to history
-        self._conversation_history.append({
-            "role": "user",
-            "content": full_message
-        })
-        
-        # Build messages array with system prompt
-        messages = [
-            {"role": "system", "content": self._system_prompt}
-        ] + self._conversation_history
+        # Add to history
+        self._conversation_history.append({"role": "user", "content": full_message})
         
         try:
-            # Call OpenAI API
             if stream:
-                # Return the stream object for Streamlit to handle
-                return self._client.chat.completions.create(
-                    model=self._model,
-                    messages=messages,
-                    stream=True
-                )
+                return self._stream_response(full_message)
             else:
                 # Get complete response
-                completion = self._client.chat.completions.create(
-                    model=self._model,
-                    messages=messages
-                )
+                response = self._chat.send_message(full_message)
+                response_text = response.text
                 
-                response = completion.choices[0].message.content
+                # Add to history
+                self._conversation_history.append({"role": "assistant", "content": response_text})
                 
-                # Add assistant response to history
-                self._conversation_history.append({
-                    "role": "assistant",
-                    "content": response
-                })
-                
-                return response
-        
+                return response_text
         except Exception as e:
             error_message = f"AI Error: {str(e)}"
-            print(f"❌ {error_message}")
             return error_message
     
-    def analyse_incident(self, incident_data: str) -> str:
-        """
-        Analyse a security incident and provide recommendations.
-        
-        Args:
-            incident_data: Formatted incident details
+    def _stream_response(self, message: str):
+        """Stream response chunks (compatible with Streamlit)"""
+        try:
+            response = self._chat.send_message(message, stream=True)
             
-        Returns:
-            Analysis and recommendations from the AI
-        """
+            full_response = ""
+            for chunk in response:
+                if chunk.text:
+                    full_response += chunk.text
+                    # Yield in OpenAI-compatible format for Streamlit
+                    yield type('obj', (object,), {
+                        'choices': [type('obj', (object,), {
+                            'delta': type('obj', (object,), {
+                                'content': chunk.text
+                            })()
+                        })()]
+                    })()
+            
+            # Add complete response to history
+            self._conversation_history.append({"role": "assistant", "content": full_response})
+            
+        except Exception as e:
+            error_text = f"Streaming error: {str(e)}"
+            yield type('obj', (object,), {
+                'choices': [type('obj', (object,), {
+                    'delta': type('obj', (object,), {'content': error_text})()
+                })()]
+            })()
+    
+    def analyse_incident(self, incident_data: str) -> str:
+        """Analyse security incident with domain-specific prompt"""
         self.set_domain("cybersecurity")
         prompt = f"""Analyse this security incident and provide:
-1. Assessment of the threat severity
-2. Potential attack vectors or vulnerabilities exploited
+1. Assessment of threat severity
+2. Potential attack vectors
 3. Recommended immediate actions
 4. Long-term preventive measures
 
 Incident Details:
 {incident_data}"""
-        
         return self.send_message(prompt)
     
     def analyse_dataset(self, dataset_data: str) -> str:
-        """
-        Analyse a dataset and provide insights.
-        
-        Args:
-            dataset_data: Formatted dataset metadata
-            
-        Returns:
-            Analysis and recommendations from the AI
-        """
+        """Analyse dataset with domain-specific prompt"""
         self.set_domain("datascience")
         prompt = f"""Analyse this dataset and provide:
-1. Assessment of the dataset characteristics
-2. Potential use cases and applications
+1. Assessment of characteristics
+2. Potential use cases
 3. Recommended analysis techniques
 4. Data quality considerations
 
 Dataset Details:
 {dataset_data}"""
-        
         return self.send_message(prompt)
     
     def analyse_ticket(self, ticket_data: str) -> str:
-        """
-        Analyse an IT ticket and suggest solutions.
-        
-        Args:
-            ticket_data: Formatted ticket details
-            
-        Returns:
-            Troubleshooting steps and recommendations from the AI
-        """
+        """Analyse IT ticket with domain-specific prompt"""
         self.set_domain("itoperations")
-        prompt = f"""Analyse this IT support ticket and provide:
+        prompt = f"""Analyse this IT ticket and provide:
 1. Assessment of the issue
 2. Likely root causes
-3. Step-by-step troubleshooting guide
+3. Step-by-step troubleshooting
 4. Preventive recommendations
 
 Ticket Details:
 {ticket_data}"""
-        
         return self.send_message(prompt)
     
     def get_conversation_history(self) -> List[Dict[str, str]]:
-        """
-        Get the full conversation history.
-        
-        Returns:
-            List of message dictionaries with 'role' and 'content' keys
-        """
+        """Get full conversation history"""
         return self._conversation_history
     
     def __str__(self) -> str:
-        """Return a string representation of the AI assistant."""
-        return f"AIAssistant(domain={self._current_domain}, model={self._model})"
+        return f"AIAssistant(domain={self._current_domain}, model={self._model_name})"

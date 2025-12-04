@@ -1,7 +1,4 @@
-"""
-Database Manager Service
-Handles all SQLite database connections and query execution
-"""
+"""Database manager service - Handles all SQLite operations"""
 
 import sqlite3
 from pathlib import Path
@@ -9,95 +6,39 @@ from typing import Any, List, Tuple, Optional
 
 
 class DatabaseManager:
-    """
-    Manages database connections and provides methods for executing
-    queries safely using parameterised statements.
-    
-    This class follows the Singleton pattern to ensure only one
-    database connection exists at a time.
-    """
+    """Manages database connections and executes parameterised queries"""
     
     def __init__(self, db_path: str):
-        """
-        Initialise the DatabaseManager with a database file path.
-        
-        Args:
-            db_path: Path to the SQLite database file
-        """
+        """Initialise with database file path"""
         self._db_path = str(Path(db_path))
         self._connection: Optional[sqlite3.Connection] = None
     
     def connect(self) -> None:
-        """
-        Establish a connection to the SQLite database.
-        Creates the database file if it doesn't exist.
-        """
+        """Establish database connection and enable foreign keys"""
         if self._connection is None:
             self._connection = sqlite3.connect(self._db_path, check_same_thread=False)
-            # Enable foreign key constraints (disabled by default in SQLite)
             self._connection.execute("PRAGMA foreign_keys = ON")
             print(f"✅ Connected to database: {self._db_path}")
     
     def close(self) -> None:
-        """
-        Close the database connection if it's open.
-        Always call this when you're done with database operations.
-        """
+        """Close database connection"""
         if self._connection is not None:
             self._connection.close()
             self._connection = None
             print("🔒 Database connection closed")
     
-    def execute_query(
-        self, 
-        sql: str, 
-        params: Tuple[Any, ...] = ()
-    ) -> sqlite3.Cursor:
-        """
-        Execute a write query (INSERT, UPDATE, DELETE) with automatic commit.
-        
-        Args:
-            sql: SQL query string with ? placeholders
-            params: Tuple of parameters to safely substitute into the query
-            
-        Returns:
-            The cursor object after execution
-            
-        Example:
-            db.execute_query(
-                "INSERT INTO users (username, role) VALUES (?, ?)",
-                ("alice", "analyst")
-            )
-        """
+    def execute_query(self, sql: str, params: Tuple[Any, ...] = ()) -> sqlite3.Cursor:
+        """Execute write query (INSERT, UPDATE, DELETE) with auto-commit"""
         if self._connection is None:
             self.connect()
         
         cursor = self._connection.cursor()
-        cursor.execute(sql, params)
+        cursor.execute(sql, params)  # Parameterised query prevents SQL injection
         self._connection.commit()
         return cursor
     
-    def fetch_one(
-        self, 
-        sql: str, 
-        params: Tuple[Any, ...] = ()
-    ) -> Optional[Tuple]:
-        """
-        Execute a SELECT query and fetch a single row.
-        
-        Args:
-            sql: SQL query string with ? placeholders
-            params: Tuple of parameters to safely substitute into the query
-            
-        Returns:
-            A tuple representing the row, or None if no results
-            
-        Example:
-            row = db.fetch_one(
-                "SELECT * FROM users WHERE username = ?",
-                ("alice",)
-            )
-        """
+    def fetch_one(self, sql: str, params: Tuple[Any, ...] = ()) -> Optional[Tuple]:
+        """Execute SELECT query and fetch single row"""
         if self._connection is None:
             self.connect()
         
@@ -105,27 +46,8 @@ class DatabaseManager:
         cursor.execute(sql, params)
         return cursor.fetchone()
     
-    def fetch_all(
-        self, 
-        sql: str, 
-        params: Tuple[Any, ...] = ()
-    ) -> List[Tuple]:
-        """
-        Execute a SELECT query and fetch all rows.
-        
-        Args:
-            sql: SQL query string with ? placeholders
-            params: Tuple of parameters to safely substitute into the query
-            
-        Returns:
-            A list of tuples, each representing a row
-            
-        Example:
-            rows = db.fetch_all(
-                "SELECT * FROM cyber_incidents WHERE severity = ?",
-                ("High",)
-            )
-        """
+    def fetch_all(self, sql: str, params: Tuple[Any, ...] = ()) -> List[Tuple]:
+        """Execute SELECT query and fetch all rows"""
         if self._connection is None:
             self.connect()
         
@@ -134,22 +56,16 @@ class DatabaseManager:
         return cursor.fetchall()
     
     def get_connection(self) -> sqlite3.Connection:
-        """
-        Get the raw SQLite connection object.
-        Useful for pandas operations like pd.read_sql_query().
-        
-        Returns:
-            The active SQLite connection
-        """
+        """Get raw connection for pandas operations"""
         if self._connection is None:
             self.connect()
         return self._connection
     
     def __enter__(self):
-        """Context manager entry: connect to database."""
+        """Context manager entry"""
         self.connect()
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit: close database connection."""
+        """Context manager exit"""
         self.close()
