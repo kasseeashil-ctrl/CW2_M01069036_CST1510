@@ -1,4 +1,4 @@
-"""Home Page"""
+"""Home Page - Professional Login"""
 
 import streamlit as st
 import time
@@ -14,7 +14,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# custom made styling
+# custom styling
 st.markdown("""
 <style>
     [data-testid="stSidebar"] {display: none;}
@@ -184,7 +184,7 @@ st.markdown("""
 # platform stats
 stats = get_platform_stats()
 
-# login/register tabs
+#login/register tabs
 tab_login, tab_register = st.tabs(["🔑 Sign In", "📝 Create Account"])
 
 with tab_login:
@@ -322,9 +322,10 @@ with col3:
     Ticket management, troubleshooting, and workload analytics.
     """)
 
-#stats row
+# stats row
 st.markdown("---")
 col1, col2, col3, col4 = st.columns(4)
+
 with col1:
     st.metric("Security Incidents", stats["incidents"])
 with col2:
@@ -341,7 +342,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# --footer--
+# footer
 st.markdown(f"""
 <div class="footer-text">
     <p>Multi-Domain Intelligence Platform • CST1510 • {datetime.now().strftime('%Y')}</p>
