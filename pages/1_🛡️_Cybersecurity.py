@@ -1,350 +1,339 @@
-"""Cybersecurity dashboard - Professional edition with comprehensive analytics"""
+"""Cybersecurity Dashboard"""
 
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
+import random
 
 from app.services.database_manager import DatabaseManager
-from app.services.ai_assistant import AIAssistant
+from app.services.ai_assistant import GeminiClient
 from app.models.security_incidents import SecurityIncident
 
 # Page configuration
-st.set_page_config(
-    page_title="Cybersecurity | Intelligence Platform",
-    page_icon="🛡️",
-    layout="wide"
-)
+st.set_page_config(page_title="Cybersecurity | Intelligence Platform", page_icon="🛡️", layout="wide")
 
-# Authentication check
+#Authentication & Authorisation Check 
 if not st.session_state.get("logged_in", False):
-    st.error("🔒 Please login to access this page")
+    st.error("🔒 Access Denied")
+    st.warning("You must be logged in to view this page.")
     if st.button("Go to Login"):
         st.switch_page("Home.py")
     st.stop()
 
-# Permission check
 user = st.session_state.get("user_object")
 if user and not user.can_access_domain('cybersecurity'):
-    st.error(f"🚫 Access Denied: Your role ({user.get_role_display_name()}) cannot access Cybersecurity.")
+    st.error("🚫 Access Denied")
+    st.warning(f"Your role ({user.get_role_display_name()}) does not have permission to access the Cybersecurity domain.")
     if st.button("Return to Home"):
         st.switch_page("Home.py")
     st.stop()
 
-# Initialise services
+#Initialise Services
 @st.cache_resource
 def get_services():
-    """Initialise database and AI"""
+    """Initialize database and AI client with caching"""
     try:
         db_path = st.secrets.get("DB_PATH", "DATA/intelligence_platform.db")
         ai_key = st.secrets.get("GEMINI_API_KEY", "")
     except:
         db_path = "DATA/intelligence_platform.db"
         ai_key = ""
-    
     db = DatabaseManager(db_path)
     db.connect()
-    ai = AIAssistant(ai_key) if ai_key else None
-    return db, ai
+    client = GeminiClient(api_key=ai_key) if ai_key else None
+    return db, client
 
-db, ai = get_services()
+db, client = get_services()
 
-# Header
-col_title, col_user = st.columns([3, 1])
-with col_title:
+# --- Header ---
+col1, col2 = st.columns([3, 1])
+with col1:
     st.title("🛡️ Cybersecurity Operations Center")
-    st.caption("Security Incident Management & Threat Analysis")
-with col_user:
-    st.markdown(f"""<div style="text-align: right; padding: 10px;">
-        <strong>{st.session_state.username}</strong><br>
-        <small>{user.get_role_display_name()}</small>
-    </div>""", unsafe_allow_html=True)
+with col2:
+    st.markdown(f"**{st.session_state.username}**<br><small>{user.get_role_display_name()}</small>", unsafe_allow_html=True)
 
 st.divider()
 
-# Sidebar filters (Week 8 criteria)
+# --- Sidebar Filters ---
 with st.sidebar:
-    st.header("🔧 Dashboard Controls")
-    st.subheader("🎯 Filters")
-    
-    severity_filter = st.multiselect(
-        "Severity Level",
-        options=["Low", "Medium", "High", "Critical"],
-        default=[]
-    )
-    
-    status_filter = st.multiselect(
-        "Status",
-        options=["Open", "Investigating", "Resolved", "Closed"],
-        default=[]
-    )
-    
-    incident_type_filter = st.multiselect(
-        "Incident Type",
-        options=["Phishing", "Malware", "DDoS", "Data Breach", "Ransomware", "Insider Threat", "Other"],
-        default=[]
-    )
+    st.header("🔧 Filters")
+    severity_filter = st.multiselect("Severity", ["Low", "Medium", "High", "Critical"])
+    status_filter = st.multiselect("Status", ["Open", "Investigating", "Resolved", "Closed"])
+    type_filter = st.multiselect("Type", ["Phishing", "Malware", "DDoS", "Data Breach", "Ransomware", "Insider Threat"])
     
     st.divider()
-    if st.button("🔄 Refresh Data", use_container_width=True):
+    if st.button("🔄 Refresh", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
     
-    st.divider()
-    st.subheader("⚡ Quick Actions")
-    show_add_incident = st.button("➕ Report New Incident", use_container_width=True, type="primary")
+    show_add = st.button("➕ New Incident", use_container_width=True, type="primary")
 
-# Fetch incidents
+# --- Load Incident Data ---
 @st.cache_data(ttl=60)
 def load_incidents():
-    """Load incidents as SecurityIncident objects"""
-    query = "SELECT id, date, incident_type, severity, status, description, reported_by FROM cyber_incidents ORDER BY date DESC, id DESC"
-    rows = db.fetch_all(query)
-    
-    incidents = []
-    for row in rows:
-        incident = SecurityIncident(
-            incident_id=row[0], date=row[1], incident_type=row[2],
-            severity=row[3], status=row[4], description=row[5], reported_by=row[6]
-        )
-        incidents.append(incident)
-    return incidents
+    """Fetch incidents from database with 60-second cache"""
+    rows = db.fetch_all("SELECT id, date, incident_type, severity, status, description, reported_by FROM cyber_incidents ORDER BY date DESC")
+    return [SecurityIncident(r[0], r[1], r[2], r[3], r[4], r[5], r[6]) for r in rows]
 
 incidents = load_incidents()
 
-# Convert to DataFrame
-def incidents_to_dataframe(incidents_list):
-    """Convert incidents to pandas DataFrame"""
-    data = []
-    for incident in incidents_list:
-        data.append({
-            "ID": incident.get_id(),
-            "Date": incident.get_date(),
-            "Type": incident.get_incident_type(),
-            "Severity": incident.get_severity(),
-            "Status": incident.get_status(),
-            "Description": incident.get_description(),
-            "Reported By": incident.get_reported_by(),
-            "Severity_Level": incident.get_severity_level()
-        })
-    return pd.DataFrame(data)
+def to_df(data):
+    """Convert incidents to pandas DataFrame for analysis"""
+    return pd.DataFrame([{
+        "ID": i.get_id(), "Date": i.get_date(), "Type": i.get_incident_type(),
+        "Severity": i.get_severity(), "Status": i.get_status(),
+        "Description": i.get_description(), "Reported By": i.get_reported_by()
+    } for i in data])
 
-df = incidents_to_dataframe(incidents)
+df = to_df(incidents)
 
-# Apply filters
+# Apply sidebar filters
 if not df.empty:
-    df_filtered = df.copy()
-    
-    if severity_filter:
-        df_filtered = df_filtered[df_filtered["Severity"].isin(severity_filter)]
-    
-    if status_filter:
-        df_filtered = df_filtered[df_filtered["Status"].isin(status_filter)]
-    
-    if incident_type_filter:
-        df_filtered = df_filtered[df_filtered["Type"].isin(incident_type_filter)]
+    df_f = df.copy()
+    if severity_filter: df_f = df_f[df_f["Severity"].isin(severity_filter)]
+    if status_filter: df_f = df_f[df_f["Status"].isin(status_filter)]
+    if type_filter: df_f = df_f[df_f["Type"].isin(type_filter)]
 else:
-    df_filtered = df
+    df_f = df
 
-# Metrics row
+#Metrics Dashboard
 st.subheader("📊 Executive Summary")
+m1, m2, m3, m4, m5 = st.columns(5)
 
-col1, col2, col3, col4, col5 = st.columns(5)
+total = len(incidents)
+active = len([i for i in incidents if i.is_open()])
+critical = len([i for i in incidents if i.is_critical()])
+resolved = total - active
+rate = (resolved / total * 100) if total > 0 else 0
 
-with col1:
-    st.metric("Total Incidents", len(incidents))
-
-with col2:
-    open_count = len([i for i in incidents if i.is_open()])
-    st.metric("Active Incidents", open_count, delta=f"+{open_count}" if open_count > 0 else "0", delta_color="inverse")
-
-with col3:
-    critical_count = len([i for i in incidents if i.is_critical()])
-    st.metric("Critical Alerts", critical_count, delta="Urgent" if critical_count > 0 else "None", delta_color="inverse")
-
-with col4:
-    total = len(incidents)
-    if total > 0:
-        resolution_rate = ((total - open_count) / total) * 100
-        st.metric("Resolution Rate", f"{resolution_rate:.1f}%")
-    else:
-        st.metric("Resolution Rate", "N/A")
-
-with col5:
-    st.metric("Avg. Resolution", "3.5 days")
+m1.metric("Total Incidents", total)
+m2.metric("Active Threats", active, delta=f"+{random.randint(0,3)}" if active > 0 else None, delta_color="inverse")
+m3.metric("Critical", critical)
+m4.metric("Resolved", resolved)
+m5.metric("Resolution Rate", f"{rate:.0f}%")
 
 st.divider()
 
-# Visualisations (Professional charts as before)
-st.subheader("📈 Threat Intelligence Analytics")
+# --- Visualization Section ---
+st.subheader("📈 Threat Analytics")
 
-if not df_filtered.empty:
+if not df_f.empty:
+    # Row 1: Pie, Bar, and Gauge charts
+    c1, c2, c3 = st.columns(3)
     
-    # Row 1: Main charts
-    chart_col1, chart_col2 = st.columns(2)
+    with c1:
+        # Donut chart for incident types
+        type_counts = df_f["Type"].value_counts()
+        fig = go.Figure(data=[go.Pie(
+            labels=type_counts.index, values=type_counts.values, hole=0.5,
+            marker_colors=px.colors.sequential.Blues_r[:len(type_counts)]
+        )])
+        fig.update_layout(title="Incidents by Type", height=300, showlegend=True)
+        st.plotly_chart(fig, use_container_width=True)
     
-    with chart_col1:
-        st.markdown("**🎯 Incident Distribution by Type**")
-        type_counts = df_filtered["Type"].value_counts()
-        fig_types = px.pie(values=type_counts.values, names=type_counts.index, hole=0.4, color_discrete_sequence=px.colors.qualitative.Set3)
-        fig_types.update_traces(textposition='inside', textinfo='percent+label')
-        fig_types.update_layout(showlegend=True, height=400)
-        st.plotly_chart(fig_types, use_container_width=True)
+    with c2:
+        # Bar chart for severity distribution
+        sev_counts = df_f["Severity"].value_counts()
+        sev_order = ["Low", "Medium", "High", "Critical"]
+        sev_sorted = {s: sev_counts.get(s, 0) for s in sev_order}
+        colors = ["#93c5fd", "#60a5fa", "#f87171", "#dc2626"]
+        fig = go.Figure(data=[go.Bar(
+            x=list(sev_sorted.keys()), y=list(sev_sorted.values()),
+            marker_color=colors, text=list(sev_sorted.values()), textposition='auto'
+        )])
+        fig.update_layout(title="Severity Distribution", height=300)
+        st.plotly_chart(fig, use_container_width=True)
     
-    with chart_col2:
-        st.markdown("**⚠️ Severity Level Distribution**")
-        severity_counts = df_filtered["Severity"].value_counts()
-        color_map = {"Low": "#90EE90", "Medium": "#FFD700", "High": "#FFA500", "Critical": "#FF4500"}
-        colors = [color_map.get(sev, "#CCCCCC") for sev in severity_counts.index]
-        
-        fig_severity = go.Figure(data=[go.Bar(x=severity_counts.index, y=severity_counts.values, marker_color=colors, text=severity_counts.values, textposition='auto')])
-        fig_severity.update_layout(xaxis_title="Severity Level", yaxis_title="Count", showlegend=False, height=400)
-        st.plotly_chart(fig_severity, use_container_width=True)
+    with c3:
+        # Gauge indicator for threat level
+        threat_score = min(100, (critical * 25) + (active * 10))
+        fig = go.Figure(go.Indicator(
+            mode="gauge+number",
+            value=threat_score,
+            gauge={
+                'axis': {'range': [0, 100]},
+                'bar': {'color': "#dc2626" if threat_score > 70 else "#f59e0b" if threat_score > 40 else "#3b82f6"},
+                'steps': [
+                    {'range': [0, 40], 'color': "#dbeafe"},
+                    {'range': [40, 70], 'color': "#fef3c7"},
+                    {'range': [70, 100], 'color': "#fecaca"}
+                ]
+            },
+            title={'text': "Threat Level"}
+        ))
+        fig.update_layout(height=300)
+        st.plotly_chart(fig, use_container_width=True)
     
-    # Row 2: Status and timeline
-    chart_col3, chart_col4 = st.columns(2)
+    # Row 2: Timeline and status overview
+    c4, c5 = st.columns(2)
     
-    with chart_col3:
-        st.markdown("**🔄 Current Status Overview**")
-        status_counts = df_filtered["Status"].value_counts()
-        status_colors = {"Open": "#FF6B6B", "Investigating": "#FFA500", "Resolved": "#4ECDC4", "Closed": "#95E1D3"}
-        
-        fig_status = go.Figure(data=[go.Pie(labels=status_counts.index, values=status_counts.values, hole=0.3, marker=dict(colors=[status_colors.get(s, "#CCCCCC") for s in status_counts.index]))])
-        fig_status.update_traces(textinfo='label+percent')
-        fig_status.update_layout(height=400)
-        st.plotly_chart(fig_status, use_container_width=True)
+    with c4:
+        # Area chart for incident timeline
+        df_time = df_f.copy()
+        df_time['Date'] = pd.to_datetime(df_time['Date'])
+        daily = df_time.groupby('Date').size().reset_index(name='Count')
+        fig = px.area(daily, x='Date', y='Count', title="Incident Timeline")
+        fig.update_traces(fill='tozeroy', line_color='#3b82f6', fillcolor='rgba(59,130,246,0.3)')
+        fig.update_layout(height=300)
+        st.plotly_chart(fig, use_container_width=True)
     
-    with chart_col4:
-        st.markdown("**📅 Incident Timeline**")
-        df_timeline = df_filtered.copy()
-        df_timeline['Date'] = pd.to_datetime(df_timeline['Date'])
-        timeline_data = df_timeline.groupby('Date').size().reset_index(name='Count')
-        
-        fig_timeline = px.line(timeline_data, x='Date', y='Count', markers=True, line_shape='spline')
-        fig_timeline.update_traces(line_color='#0EA5E9', marker=dict(size=8, color='#0EA5E9'))
-        fig_timeline.update_layout(xaxis_title="Date", yaxis_title="Incidents", height=400)
-        st.plotly_chart(fig_timeline, use_container_width=True)
+    with c5:
+        # Horizontal bar chart for status overview
+        status_counts = df_f["Status"].value_counts()
+        colors_status = {"Open": "#ef4444", "Investigating": "#f59e0b", "Resolved": "#3b82f6", "Closed": "#6b7280"}
+        fig = go.Figure(data=[go.Bar(
+            y=status_counts.index, x=status_counts.values, orientation='h',
+            marker_color=[colors_status.get(s, "#3b82f6") for s in status_counts.index],
+            text=status_counts.values, textposition='auto'
+        )])
+        fig.update_layout(title="Status Overview", height=300)
+        st.plotly_chart(fig, use_container_width=True)
     
-    # Row 3: Advanced analytics
-    st.markdown("**🔍 Advanced Threat Analysis**")
+    # Row 3: Heatmap and treemap
+    c6, c7 = st.columns(2)
     
-    analysis_col1, analysis_col2, analysis_col3 = st.columns(3)
+    with c6:
+        # Heatmap for type vs severity correlation
+        cross = pd.crosstab(df_f['Type'], df_f['Severity'])
+        fig = px.imshow(cross, text_auto=True, color_continuous_scale='Blues', title="Type vs Severity")
+        fig.update_layout(height=350)
+        st.plotly_chart(fig, use_container_width=True)
     
-    with analysis_col1:
-        st.markdown("**Top 5 Threat Vectors**")
-        top_types = df_filtered["Type"].value_counts().head(5)
-        fig_top = go.Figure(data=[go.Bar(y=top_types.index[::-1], x=top_types.values[::-1], orientation='h', marker_color='#0EA5E9', text=top_types.values[::-1], textposition='auto')])
-        fig_top.update_layout(xaxis_title="Count", yaxis_title="", height=300, margin=dict(l=150))
-        st.plotly_chart(fig_top, use_container_width=True)
-    
-    with analysis_col2:
-        st.markdown("**Severity vs Status Matrix**")
-        severity_status = pd.crosstab(df_filtered['Severity'], df_filtered['Status'])
-        fig_heatmap = go.Figure(data=go.Heatmap(z=severity_status.values, x=severity_status.columns, y=severity_status.index, colorscale='YlOrRd', text=severity_status.values, texttemplate='%{text}'))
-        fig_heatmap.update_layout(xaxis_title="Status", yaxis_title="Severity", height=300)
-        st.plotly_chart(fig_heatmap, use_container_width=True)
-    
-    with analysis_col3:
-        st.markdown("**Reporter Statistics**")
-        reporter_counts = df_filtered["Reported By"].value_counts().head(5)
-        fig_reporters = px.bar(x=reporter_counts.values, y=reporter_counts.index, orientation='h', color=reporter_counts.values, color_continuous_scale='Blues')
-        fig_reporters.update_layout(xaxis_title="Reports", yaxis_title="", showlegend=False, height=300, margin=dict(l=100))
-        st.plotly_chart(fig_reporters, use_container_width=True)
+    with c7:
+        # Treemap for incident hierarchy
+        fig = px.treemap(df_f, path=['Status', 'Type'], title="Incident Hierarchy", 
+                        color_discrete_sequence=px.colors.sequential.Blues_r)
+        fig.update_layout(height=350)
+        st.plotly_chart(fig, use_container_width=True)
 
 else:
-    st.info("📊 No incidents match the filters. Adjust filters or report new incident.")
+    st.info("No incidents match filters")
 
 st.divider()
 
-# Incidents table
+# Incident Management & AI Analysis
 st.subheader("🔍 Incident Management")
 
-if not df_filtered.empty:
-    filter_summary = f"Showing **{len(df_filtered)}** of **{len(df)}** incidents"
-    st.caption(filter_summary)
+if not df_f.empty:
+    # Incident selection dropdown
+    selected_id = st.selectbox("Select Incident", df_f["ID"].tolist(),
+        format_func=lambda x: f"INC-{x:04d} | {df_f[df_f['ID']==x]['Type'].values[0]} | {df_f[df_f['ID']==x]['Severity'].values[0]}")
     
-    selected_incident_id = st.selectbox(
-        "Select incident to view details:",
-        options=df_filtered["ID"].tolist(),
-        format_func=lambda x: f"INC-{x:04d} | {df_filtered[df_filtered['ID']==x]['Type'].values[0]} | {df_filtered[df_filtered['ID']==x]['Severity'].values[0]}"
-    )
+    # Data table display
+    st.dataframe(df_f, use_container_width=True, hide_index=True)
     
-    st.dataframe(df_filtered.drop(columns=['Severity_Level']), use_container_width=True, hide_index=True)
-    
-    # AI Analysis section
-    if ai and selected_incident_id:
+    # AI Assistant Section
+    if client:
         st.divider()
-        st.subheader("🤖 AI-Powered Incident Analysis")
+        st.subheader("🤖 AI Analysis")
         
-        selected_incident = next(i for i in incidents if i.get_id() == selected_incident_id)
+        # AI analysis buttons
+        b1, b2, b3 = st.columns(3)
+        with b1:
+            btn1 = st.button("🔬 Analyse Incident", use_container_width=True)
+        with b2:
+            btn2 = st.button("📊 Dashboard Insights", use_container_width=True, type="primary")
+        with b3:
+            btn3 = st.button("🎯 Threat Intel", use_container_width=True)
         
-        col_ai1, col_ai2 = st.columns([3, 1])
-        with col_ai1:
-            st.markdown(f"**Analysing Incident #{selected_incident_id}:** {selected_incident.get_incident_type()}")
-        with col_ai2:
-            analyse_button = st.button("🔬 Analyse with AI", use_container_width=True, type="primary")
+        # Individual AI analysis handlers
+        if btn1:
+            selected = next(i for i in incidents if i.get_id() == selected_id)
+            messages = [
+                {"role": "system", "content": "You're a cybersecurity analyst. Be concise."},
+                {"role": "user", "content": f"Analyse this incident:\n{selected.get_ai_context()}"}
+            ]
+            with st.chat_message("assistant"):
+                container = st.empty()
+                full = ""
+                for chunk in client.chat.completions.create(model="gemini-2.0-flash", messages=messages, stream=True):
+                    if chunk.choices[0].delta.content:
+                        full += chunk.choices[0].delta.content
+                        container.markdown(full + "▌")
+                container.markdown(full)
         
-        if analyse_button:
-            with st.spinner("🤖 AI is analysing the incident..."):
-                context = selected_incident.get_ai_context()
-                ai.set_domain("cybersecurity")
-                analysis = ai.analyse_incident(context)
-                
-                with st.expander("📊 Analysis Report", expanded=True):
-                    st.markdown(analysis)
-                
-                st.divider()
-                st.markdown("#### 💬 Ask Follow-up Questions")
-                follow_up = st.text_input("Have questions?", placeholder="e.g., What MITRE ATT&CK techniques are involved?")
-                
-                if follow_up:
-                    with st.spinner("🤖 Generating response..."):
-                        response = ai.send_message(follow_up, context=context)
-                        st.markdown("**AI Response:**")
-                        st.info(response)
+        if btn2:
+            summary = f"""Dashboard Summary:
+- Total: {total}, Active: {active}, Critical: {critical}
+- Resolution Rate: {rate:.0f}%
+- Types: {df_f['Type'].value_counts().to_dict()}
+- Severity: {df_f['Severity'].value_counts().to_dict()}
+- Status: {df_f['Status'].value_counts().to_dict()}"""
+            messages = [
+                {"role": "system", "content": "You're a security analyst. Provide insights."},
+                {"role": "user", "content": f"Analyse:\n{summary}"}
+            ]
+            with st.chat_message("assistant"):
+                container = st.empty()
+                full = ""
+                for chunk in client.chat.completions.create(model="gemini-2.0-flash", messages=messages, stream=True):
+                    if chunk.choices[0].delta.content:
+                        full += chunk.choices[0].delta.content
+                        container.markdown(full + "▌")
+                container.markdown(full)
+        
+        if btn3:
+            messages = [
+                {"role": "system", "content": "You're a threat intelligence analyst."},
+                {"role": "user", "content": f"Threat landscape insights for: {df_f['Type'].value_counts().to_dict()}"}
+            ]
+            with st.chat_message("assistant"):
+                container = st.empty()
+                full = ""
+                for chunk in client.chat.completions.create(model="gemini-2.0-flash", messages=messages, stream=True):
+                    if chunk.choices[0].delta.content:
+                        full += chunk.choices[0].delta.content
+                        container.markdown(full + "▌")
+                container.markdown(full)
+        
+        # General AI chat input
+        st.divider()
+        q = st.chat_input("Ask about security...")
+        if q:
+            messages = [{"role": "system", "content": "You're a security assistant."}, {"role": "user", "content": q}]
+            with st.chat_message("user"):
+                st.markdown(q)
+            with st.chat_message("assistant"):
+                container = st.empty()
+                full = ""
+                for chunk in client.chat.completions.create(model="gemini-2.0-flash", messages=messages, stream=True):
+                    if chunk.choices[0].delta.content:
+                        full += chunk.choices[0].delta.content
+                        container.markdown(full + "▌")
+                container.markdown(full)
     else:
-        if not ai:
-            st.warning("⚠️ AI Assistant not configured. Add Gemini API key to enable AI analysis.")
+        st.warning("⚠️ AI not configured")
 
-else:
-    st.info("📊 No incidents to display.")
-
-# Add incident form
-if show_add_incident:
+#New Incident Form
+if show_add:
     st.divider()
-    st.subheader("➕ Report New Security Incident")
+    st.subheader("➕ Report Incident")
     
-    with st.form("new_incident_form"):
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            incident_date = st.date_input("Date", value=datetime.today())
-            incident_type = st.selectbox("Type", ["Phishing", "Malware", "DDoS", "Data Breach", "Ransomware", "Insider Threat", "Other"])
+    with st.form("new_incident"):
+        c1, c2 = st.columns(2)
+        with c1:
+            date = st.date_input("Date", datetime.today())
+            inc_type = st.selectbox("Type", ["Phishing", "Malware", "DDoS", "Data Breach", "Ransomware", "Insider Threat", "Other"])
             severity = st.selectbox("Severity", ["Low", "Medium", "High", "Critical"], index=2)
+        with c2:
+            status = st.selectbox("Status", ["Open", "Investigating"])
+            reported = st.text_input("Reported By", st.session_state.username, disabled=True)
         
-        with col2:
-            status = st.selectbox("Status", ["Open", "Investigating"], index=0)
-            reported_by = st.text_input("Reported By", value=st.session_state.username, disabled=True)
+        desc = st.text_area("Description", placeholder="Describe the incident...", height=100)
         
-        description = st.text_area("Description", placeholder="Detailed incident description...", height=150)
-        
-        submit = st.form_submit_button("🚀 Submit Incident", use_container_width=True, type="primary")
-        
-        if submit:
-            if not description or len(description) < 20:
-                st.error("⚠️ Description must be at least 20 characters")
+        if st.form_submit_button("🚀 Submit", use_container_width=True, type="primary"):
+            if desc and len(desc) >= 20:
+                db.execute_query(
+                    "INSERT INTO cyber_incidents (date, incident_type, severity, status, description, reported_by) VALUES (?, ?, ?, ?, ?, ?)",
+                    (str(date), inc_type, severity, status, desc, reported))
+                st.success("✅ Incident reported!")
+                st.cache_data.clear()
+                st.rerun()
             else:
-                try:
-                    query = "INSERT INTO cyber_incidents (date, incident_type, severity, status, description, reported_by) VALUES (?, ?, ?, ?, ?, ?)"
-                    db.execute_query(query, (str(incident_date), incident_type, severity, status, description, reported_by))
-                    st.success("✅ Incident reported successfully!")
-                    st.cache_data.clear()
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"❌ Error: {e}")
+                st.error("Description must be at least 20 characters")
 
-# Footer
+# --- Footer ---
 st.divider()
-st.caption("🛡️ Cybersecurity Operations Center | Powered by Google Gemini AI")
-st.caption(f"Session: {st.session_state.username} | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+st.caption(f"🛡️ Cybersecurity Operations | {st.session_state.username} | {datetime.now().strftime('%H:%M:%S')}")

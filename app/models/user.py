@@ -3,7 +3,7 @@
 class User:
     """Represents an authenticated user with domain permissions"""
     
-    # Define which domains each role can access
+    # Defining which domains each role can access
     ROLE_PERMISSIONS = {
         'cybersecurity': ['cybersecurity', 'ai_assistant'],
         'datascience': ['datascience', 'ai_assistant'],
@@ -40,13 +40,13 @@ class User:
     def get_role_display_name(self) -> str:
         """Get human-readable role name"""
         names = {
-            'cybersecurity': 'Cybersecurity Analyst',
-            'datascience': 'Data Scientist',
-            'itoperations': 'IT Operations Engineer',
-            'admin': 'System Administrator'
+            'cybersecurity': 'Cybersecurity Analyst', # Map 'cybersecurity' to 'Cybersecurity Analyst
+            'datascience': 'Data Scientist', #Map 'datascience' to 'Data Scientist'
+            'itoperations': 'IT Operations Engineer', # Map 'itoperations' to 'IT Operations Engineer'
+            'admin': 'System Administrator' # Map 'admin' to 'System Administrator'
         }
         return names.get(self.__role, self.__role.title())
-    
+    # Maps user roles to their respective application home pages for navigation.
     def get_home_page(self) -> str:
         """Get default home page for user's role"""
         pages = {

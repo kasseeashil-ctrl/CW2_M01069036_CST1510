@@ -1,177 +1,150 @@
-"""AI assistant service using Google Gemini"""
+"""AI assistant service using Google Gemini (OpenAI-compatible structure)"""
 
 import google.generativeai as genai
 from typing import List, Dict, Optional
 
 
 class AIAssistant:
-    """Wrapper for Gemini API with domain-specific prompts"""
+    """Gemini API wrapper following OpenAI patterns from Week 10 Lab"""
     
-    # Domain-specific system prompts
-    DOMAIN_PROMPTS = {
-        "cybersecurity": """You are a cybersecurity expert for a Multi-Domain Intelligence Platform.
-Analyse security incidents, explain attack vectors, and provide NIST/MITRE ATT&CK recommendations.
-Use professional terminology. Format: Clear, structured responses with bullet points.""",
-        
-        "datascience": """You are a data science expert for a Multi-Domain Intelligence Platform.
-Analyse datasets, recommend techniques, explain statistical methods, and suggest visualisations.
-Use professional tone. Format: Clear explanations with practical examples.""",
-        
-        "itoperations": """You are an IT operations expert for a Multi-Domain Intelligence Platform.
-Troubleshoot issues, recommend best practices, and provide step-by-step resolution guides.
-Use solution-oriented tone. Format: Clear, actionable steps with explanations.""",
-        
-        "general": """You are a helpful assistant for a Multi-Domain Intelligence Platform.
-Provide professional, accurate advice across Cybersecurity, Data Science, and IT Operations."""
-    }
-    
-    def __init__(self, api_key: str, default_model: str = "gemini-1.5-flash"):
-        """Initialise Gemini AI assistant"""
+    def __init__(self, api_key: str, default_model: str = "gemini-2.0-flash"):
         genai.configure(api_key=api_key)
-        
-        # Generation configuration
-        self._generation_config = {
-            "temperature": 1.0,
-            "top_p": 0.95,
-            "top_k": 40,
-            "max_output_tokens": 8192,
-        }
-        
         self._model_name = default_model
-        self._current_domain = "general"
-        self._conversation_history: List[Dict[str, str]] = []
-        self._system_prompt = self.DOMAIN_PROMPTS["general"]
+        self._model = genai.GenerativeModel(model_name=self._model_name)
+        self._chat = None
+        self._messages: List[Dict[str, str]] = []
+    
+    def _get_system_prompt(self) -> Optional[str]:
+        """Extract system prompt from messages"""
+        for msg in self._messages:
+            if msg["role"] == "system":
+                return msg["content"]
+        return None
+    
+    def _convert_messages_for_gemini(self) -> List[Dict]:
+        """Convert OpenAI format to Gemini format"""
+        gemini_history = []
+        for msg in self._messages:
+            if msg["role"] == "system":
+                continue
+            role = "user" if msg["role"] == "user" else "model"
+            gemini_history.append({"role": role, "parts": [msg["content"]]})
+        return gemini_history
+    
+    def set_messages(self, messages: List[Dict[str, str]]) -> None:
+        """Set conversation messages (OpenAI format)"""
+        self._messages = messages
         
-        # Initialise model
-        self._initialize_model()
-    
-    def _initialize_model(self):
-        """Create Gemini model with system instruction"""
-        self._model = genai.GenerativeModel(
-            model_name=self._model_name,
-            generation_config=self._generation_config,
-            system_instruction=self._system_prompt
-        )
-        self._chat = self._model.start_chat(history=[])
-    
-    def set_domain(self, domain: str) -> None:
-        """Set AI domain context for specialised responses"""
-        domain_lower = domain.lower()
-        if domain_lower in self.DOMAIN_PROMPTS:
-            self._current_domain = domain_lower
-            self._system_prompt = self.DOMAIN_PROMPTS[domain_lower]
-            self._initialize_model()  # Reinitialise with new prompt
+        system_prompt = self._get_system_prompt()
+        if system_prompt:
+            self._model = genai.GenerativeModel(
+                model_name=self._model_name,
+                system_instruction=system_prompt
+            )
+        
+        history = self._convert_messages_for_gemini()
+        if len(history) > 1:
+            self._chat = self._model.start_chat(history=history[:-1])
         else:
-            self._current_domain = "general"
-            self._system_prompt = self.DOMAIN_PROMPTS["general"]
-            self._initialize_model()
+            self._chat = self._model.start_chat(history=[])
     
-    def get_current_domain(self) -> str:
-        """Return currently active domain"""
-        return self._current_domain
-    
-    def clear_conversation(self) -> None:
-        """Clear conversation history"""
-        self._conversation_history = []
-        self._chat = self._model.start_chat(history=[])
-    
-    def send_message(self, user_message: str, context: Optional[str] = None, stream: bool = False):
-        """Send message to AI and get response"""
-        # Build full message with context
-        full_message = user_message
-        if context:
-            full_message = f"{user_message}\n\nContext:\n{context}"
+    def chat_completions_create(self, messages: List[Dict[str, str]], stream: bool = False, temperature: float = 1.0):
+        """
+        OpenAI-compatible completion method
+        Mirrors: client.chat.completions.create()
+        """
+        self.set_messages(messages)
         
-        # Add to history
-        self._conversation_history.append({"role": "user", "content": full_message})
+        last_message = ""
+        for msg in reversed(messages):
+            if msg["role"] == "user":
+                last_message = msg["content"]
+                break
+        
+        if not last_message:
+            return self._create_response("No user message found")
         
         try:
             if stream:
-                return self._stream_response(full_message)
+                return self._stream_response(last_message)
             else:
-                # Get complete response
-                response = self._chat.send_message(full_message)
-                response_text = response.text
-                
-                # Add to history
-                self._conversation_history.append({"role": "assistant", "content": response_text})
-                
-                return response_text
+                response = self._chat.send_message(last_message)
+                return self._create_response(response.text)
         except Exception as e:
-            error_message = f"AI Error: {str(e)}"
-            return error_message
+            return self._create_response(f"Error: {str(e)}")
+    
+    def _create_response(self, content: str):
+        """Create OpenAI-compatible response object"""
+        return type('ChatCompletion', (), {
+            'choices': [
+                type('Choice', (), {
+                    'message': type('Message', (), {
+                        'content': content,
+                        'role': 'assistant'
+                    })()
+                })()
+            ]
+        })()
     
     def _stream_response(self, message: str):
-        """Stream response chunks (compatible with Streamlit)"""
+        """
+        Stream response in OpenAI-compatible format
+        Yields chunks with: chunk.choices[0].delta.content
+        """
         try:
             response = self._chat.send_message(message, stream=True)
             
-            full_response = ""
             for chunk in response:
                 if chunk.text:
-                    full_response += chunk.text
-                    # Yield in OpenAI-compatible format for Streamlit
-                    yield type('obj', (object,), {
-                        'choices': [type('obj', (object,), {
-                            'delta': type('obj', (object,), {
-                                'content': chunk.text
+                    yield type('StreamChunk', (), {
+                        'choices': [
+                            type('Choice', (), {
+                                'delta': type('Delta', (), {
+                                    'content': chunk.text
+                                })()
                             })()
-                        })()]
+                        ]
                     })()
-            
-            # Add complete response to history
-            self._conversation_history.append({"role": "assistant", "content": full_response})
-            
         except Exception as e:
-            error_text = f"Streaming error: {str(e)}"
-            yield type('obj', (object,), {
-                'choices': [type('obj', (object,), {
-                    'delta': type('obj', (object,), {'content': error_text})()
-                })()]
+            # Yield each chunk in OpenAI-compatible format
+            yield type('StreamChunk', (), {
+                'choices': [
+                    type('Choice', (), {
+                        'delta': type('Delta', (), {
+                            'content': f"Error: {str(e)}"
+                        })()
+                    })()
+                ]
             })()
     
-    def analyse_incident(self, incident_data: str) -> str:
-        """Analyse security incident with domain-specific prompt"""
-        self.set_domain("cybersecurity")
-        prompt = f"""Analyse this security incident and provide:
-1. Assessment of threat severity
-2. Potential attack vectors
-3. Recommended immediate actions
-4. Long-term preventive measures
+    def clear_conversation(self) -> None:
+        """Clear conversation history"""
+        self._messages = []
+        self._chat = self._model.start_chat(history=[])
+    
+    def get_messages(self) -> List[Dict[str, str]]:
+        """Get current messages"""
+        return self._messages
 
-Incident Details:
-{incident_data}"""
-        return self.send_message(prompt)
-    
-    def analyse_dataset(self, dataset_data: str) -> str:
-        """Analyse dataset with domain-specific prompt"""
-        self.set_domain("datascience")
-        prompt = f"""Analyse this dataset and provide:
-1. Assessment of characteristics
-2. Potential use cases
-3. Recommended analysis techniques
-4. Data quality considerations
 
-Dataset Details:
-{dataset_data}"""
-        return self.send_message(prompt)
+class GeminiClient:
+    """
+    OpenAI-compatible client wrapper
+    Usage mirrors: client = OpenAI(api_key=...)
+    """
     
-    def analyse_ticket(self, ticket_data: str) -> str:
-        """Analyse IT ticket with domain-specific prompt"""
-        self.set_domain("itoperations")
-        prompt = f"""Analyse this IT ticket and provide:
-1. Assessment of the issue
-2. Likely root causes
-3. Step-by-step troubleshooting
-4. Preventive recommendations
-
-Ticket Details:
-{ticket_data}"""
-        return self.send_message(prompt)
+    def __init__(self, api_key: str):
+        self._assistant = AIAssistant(api_key)
+        self.chat = self._ChatCompletions(self._assistant)
     
-    def get_conversation_history(self) -> List[Dict[str, str]]:
-        """Get full conversation history"""
-        return self._conversation_history
-    
-    def __str__(self) -> str:
-        return f"AIAssistant(domain={self._current_domain}, model={self._model_name})"
+    class _ChatCompletions:
+        def __init__(self, assistant: AIAssistant):
+            self._assistant = assistant
+            self.completions = self # Allow client.chat.completions.create() syntax
+        
+        def create(self, model: str, messages: List[Dict[str, str]], stream: bool = False, temperature: float = 1.0):
+            """
+            OpenAI-compatible method
+            Usage: client.chat.completions.create(model=..., messages=..., stream=...)
+            """
+            return self._assistant.chat_completions_create(messages, stream, temperature)

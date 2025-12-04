@@ -10,14 +10,14 @@ class DatabaseManager:
     
     def __init__(self, db_path: str):
         """Initialise with database file path"""
-        self._db_path = str(Path(db_path))
-        self._connection: Optional[sqlite3.Connection] = None
+        self._db_path = str(Path(db_path))  # Normalise and store the path
+        self._connection: Optional[sqlite3.Connection] = None  
     
     def connect(self) -> None:
         """Establish database connection and enable foreign keys"""
         if self._connection is None:
             self._connection = sqlite3.connect(self._db_path, check_same_thread=False)
-            self._connection.execute("PRAGMA foreign_keys = ON")
+            self._connection.execute("PRAGMA foreign_keys = ON")  # Enable FK constraints
             print(f"✅ Connected to database: {self._db_path}")
     
     def close(self) -> None:
@@ -34,7 +34,7 @@ class DatabaseManager:
         
         cursor = self._connection.cursor()
         cursor.execute(sql, params)  # Parameterised query prevents SQL injection
-        self._connection.commit()
+        self._connection.commit()  # Auto-commit changes
         return cursor
     
     def fetch_one(self, sql: str, params: Tuple[Any, ...] = ()) -> Optional[Tuple]:
@@ -44,7 +44,7 @@ class DatabaseManager:
         
         cursor = self._connection.cursor()
         cursor.execute(sql, params)
-        return cursor.fetchone()
+        return cursor.fetchone()  # Returns None if no results
     
     def fetch_all(self, sql: str, params: Tuple[Any, ...] = ()) -> List[Tuple]:
         """Execute SELECT query and fetch all rows"""
@@ -53,7 +53,7 @@ class DatabaseManager:
         
         cursor = self._connection.cursor()
         cursor.execute(sql, params)
-        return cursor.fetchall()
+        return cursor.fetchall()  # Returns empty list if no results
     
     def get_connection(self) -> sqlite3.Connection:
         """Get raw connection for pandas operations"""
@@ -62,10 +62,10 @@ class DatabaseManager:
         return self._connection
     
     def __enter__(self):
-        """Context manager entry"""
+        """Context manager entry for 'with' statement"""
         self.connect()
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit"""
+        """Context manager exit - auto closes connection"""
         self.close()

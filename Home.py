@@ -1,14 +1,12 @@
-"""
-Multi-Domain Intelligence Platform - Home Page
-Role-Based Login and Registration Interface
-"""
+"""Home Page"""
 
 import streamlit as st
+import time
+from datetime import datetime
 from app.services.database_manager import DatabaseManager
 from app.services.auth_manager import AuthManager
 from app.data.schema import create_all_tables
 
-# Page configuration
 st.set_page_config(
     page_title="Login | Intelligence Platform",
     page_icon="🔐",
@@ -16,25 +14,130 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Initialise database on first run
+# custom made styling
+st.markdown("""
+<style>
+    [data-testid="stSidebar"] {display: none;}
+    
+    .main-header {
+        text-align: center;
+        padding: 20px 0;
+        background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%);
+        border-radius: 16px;
+        margin-bottom: 30px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    }
+    
+    .main-header h1 {
+        color: #ffffff;
+        font-size: 2.2rem;
+        margin-bottom: 5px;
+        font-weight: 700;
+    }
+    
+    .main-header p {
+        color: #94a3b8;
+        font-size: 1rem;
+        margin: 0;
+    }
+    
+    .login-card {
+        background: #ffffff;
+        border-radius: 12px;
+        padding: 30px;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+        border: 1px solid #e2e8f0;
+    }
+    
+    .stats-row {
+        display: flex;
+        justify-content: space-around;
+        padding: 15px 0;
+        margin-top: 20px;
+        border-top: 1px solid #e2e8f0;
+    }
+    
+    .stat-item {
+        text-align: center;
+    }
+    
+    .stat-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1e40af;
+    }
+    
+    .stat-label {
+        font-size: 0.75rem;
+        color: #64748b;
+        text-transform: uppercase;
+    }
+    
+    .feature-badge {
+        display: inline-block;
+        background: #dbeafe;
+        color: #1e40af;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        margin: 3px;
+    }
+    
+    .security-notice {
+        background: #f0fdf4;
+        border-left: 4px solid #22c55e;
+        padding: 12px 16px;
+        border-radius: 0 8px 8px 0;
+        margin-top: 20px;
+    }
+    
+    .security-notice p {
+        margin: 0;
+        color: #166534;
+        font-size: 0.85rem;
+    }
+    
+    .footer-text {
+        text-align: center;
+        color: #94a3b8;
+        font-size: 0.8rem;
+        margin-top: 30px;
+        padding-top: 20px;
+        border-top: 1px solid #e2e8f0;
+    }
+    
+    .stProgress .st-bo {background-color: #3b82f6;}
+</style>
+""", unsafe_allow_html=True)
+
+# init database
 @st.cache_resource
-def init_database():
-    """Initialise the database and create tables if they don't exist."""
+def init_db():
     try:
         db_path = st.secrets.get("DB_PATH", "DATA/intelligence_platform.db")
     except:
         db_path = "DATA/intelligence_platform.db"
-    
     db = DatabaseManager(db_path)
     db.connect()
     create_all_tables(db.get_connection())
     return db
 
-# Get database and auth manager
-db = init_database()
+db = init_db()
 auth = AuthManager(db)
 
-# Initialise session state
+# get platform stats for display
+@st.cache_data(ttl=300)
+def get_platform_stats():
+    try:
+        incidents = db.fetch_all("SELECT COUNT(*) FROM cyber_incidents")[0][0] or 0
+        datasets = db.fetch_all("SELECT COUNT(*) FROM datasets_metadata")[0][0] or 0
+        tickets = db.fetch_all("SELECT COUNT(*) FROM it_tickets")[0][0] or 0
+        users = db.fetch_all("SELECT COUNT(*) FROM users")[0][0] or 0
+        return {"incidents": incidents, "datasets": datasets, "tickets": tickets, "users": users}
+    except:
+        return {"incidents": 0, "datasets": 0, "tickets": 0, "users": 0}
+
+# session state
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "username" not in st.session_state:
@@ -44,212 +147,204 @@ if "user_role" not in st.session_state:
 if "user_object" not in st.session_state:
     st.session_state.user_object = None
 
-# Header
-st.title("🔐 Multi-Domain Intelligence Platform")
-st.markdown("### Secure Access Portal")
-st.caption("Role-based access to specialized intelligence domains")
-st.divider()
-
-# If already logged in, show access information
+# if logged in, show dashboard redirect
 if st.session_state.logged_in:
     user = st.session_state.user_object
     
-    st.success(f"✅ Logged in as **{st.session_state.username}**")
-    st.info(f"**Role:** {user.get_role_display_name()}")
+    st.markdown(f"""
+    <div class="main-header">
+        <h1>👋 Welcome back, {st.session_state.username}!</h1>
+        <p>{user.get_role_display_name()}</p>
+    </div>
+    """, unsafe_allow_html=True)
     
-    # Show accessible domains
-    st.markdown("### 📂 Your Accessible Domains:")
-    
-    allowed_domains = user.get_allowed_domains()
-    
-    domain_info = {
-        'cybersecurity': ('🛡️', 'Cybersecurity Operations', 'Manage security incidents and threats'),
-        'datascience': ('📊', 'Data Science Analytics', 'Analyse datasets and generate insights'),
-        'itoperations': ('💻', 'IT Operations Management', 'Handle support tickets and infrastructure'),
-        'ai_assistant': ('🤖', 'AI Assistant', 'Get AI-powered help for your domain')
-    }
-    
-    cols = st.columns(2)
-    col_idx = 0
-    
-    for domain in allowed_domains:
-        if domain == 'admin_panel':
-            continue  # Skip admin panel in this view
-            
-        if domain in domain_info:
-            icon, title, desc = domain_info[domain]
-            
-            with cols[col_idx % 2]:
-                st.markdown(f"""
-                <div style="padding: 20px; border: 2px solid #0EA5E9; border-radius: 10px; margin-bottom: 10px;">
-                    <h3>{icon} {title}</h3>
-                    <p style="color: #666;">{desc}</p>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            col_idx += 1
-    
-    st.divider()
-    
-    # Navigation buttons
-    button_col1, button_col2, button_col3 = st.columns(3)
-    
-    with button_col1:
-        if st.button("🏠 Go to Dashboard", use_container_width=True, type="primary"):
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        if st.button("🚀 Continue to Dashboard", use_container_width=True, type="primary"):
             st.switch_page(user.get_home_page())
-    
-    with button_col2:
-        if user.can_access_domain('ai_assistant'):
-            if st.button("🤖 AI Assistant", use_container_width=True):
-                st.switch_page("pages/4_🤖_AI_Assistant.py")
-    
-    with button_col3:
-        if st.button("🚪 Logout", use_container_width=True, type="secondary"):
+        
+        st.write("")
+        
+        if st.button("🚪 Sign Out", use_container_width=True):
             st.session_state.logged_in = False
             st.session_state.username = ""
             st.session_state.user_role = ""
             st.session_state.user_object = None
             st.rerun()
-    
     st.stop()
 
-# Login / Register tabs
-tab_login, tab_register = st.tabs(["🔑 Login", "📝 Register"])
+# main header
+st.markdown("""
+<div class="main-header">
+    <h1>🛡️ Intelligence Platform</h1>
+    <p>Multi-Domain Security & Analytics System</p>
+</div>
+""", unsafe_allow_html=True)
 
-# ========== LOGIN TAB ==========
+# platform stats
+stats = get_platform_stats()
+
+# login/register tabs
+tab_login, tab_register = st.tabs(["🔑 Sign In", "📝 Create Account"])
+
 with tab_login:
-    st.subheader("Login to Your Account")
+    st.markdown("#### Welcome back")
+    st.caption("Enter your credentials to access the platform")
     
-    with st.form("login_form"):
-        login_username = st.text_input(
-            "Username",
-            placeholder="Enter your username",
-            key="login_username"
-        )
-        login_password = st.text_input(
-            "Password",
-            type="password",
-            placeholder="Enter your password",
-            key="login_password"
-        )
+    with st.form("login_form", clear_on_submit=False):
+        username = st.text_input("Username", placeholder="Enter your username")
+        password = st.text_input("Password", type="password", placeholder="Enter your password")
         
-        submitted = st.form_submit_button("🔓 Login", use_container_width=True, type="primary")
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            remember = st.checkbox("Remember me", value=True)
+        with col2:
+            st.caption("")  # spacing
         
-        if submitted:
-            if not login_username or not login_password:
-                st.error("⚠️ Please fill in all fields")
+        submit = st.form_submit_button("Sign In", use_container_width=True, type="primary")
+        
+        if submit:
+            if not username or not password:
+                st.error("Please enter both username and password")
             else:
-                # Authenticate user
-                success, user, message = auth.login_user(login_username, login_password)
+                success, user, message = auth.login_user(username, password)
                 
                 if success:
-                    # Store user info in session state
+                    # show loading
+                    progress = st.progress(0, text="Authenticating...")
+                    for i in range(100):
+                        time.sleep(0.006)
+                        if i < 30:
+                            progress.progress(i + 1, text="Verifying credentials...")
+                        elif i < 60:
+                            progress.progress(i + 1, text="Loading user profile...")
+                        elif i < 90:
+                            progress.progress(i + 1, text="Preparing dashboard...")
+                        else:
+                            progress.progress(i + 1, text="Almost ready...")
+                    
+                    # save session
                     st.session_state.logged_in = True
                     st.session_state.username = user.get_username()
                     st.session_state.user_role = user.get_role()
                     st.session_state.user_object = user
                     
-                    st.success(f"✅ {message}")
-                    
-                    # Redirect to user's home page based on role
-                    st.info(f"Redirecting to {user.get_role_display_name()} dashboard...")
+                    st.success(f"✅ Welcome, {user.get_username()}!")
+                    time.sleep(0.5)
                     st.switch_page(user.get_home_page())
                 else:
                     st.error(f"❌ {message}")
     
-    # Demo accounts information
-    with st.expander("🎯 Demo Accounts (for testing)"):
+    # demo accounts section
+    with st.expander("🎯 Demo Accounts", expanded=False):
         st.markdown("""
-        **Role-Based Demo Accounts:**
-        
-        🛡️ **Cybersecurity Analyst**
-        - Username: `cyber_analyst`
-        - Password: `CyberPass123!`
-        - Access: Cybersecurity + AI Assistant only
-        
-        📊 **Data Scientist**
-        - Username: `data_scientist`
-        - Password: `DataPass123!`
-        - Access: Data Science + AI Assistant only
-        
-        💻 **IT Operations Engineer**
-        - Username: `it_engineer`
-        - Password: `ITPass123!`
-        - Access: IT Operations + AI Assistant only
-        
-        👑 **System Administrator**
-        - Username: `admin`
-        - Password: `AdminPass123!`
-        - Access: All domains + Admin panel
+        | Role | Username | Password |
+        |:-----|:---------|:---------|
+        | 🛡️ Cybersecurity | `cyber_analyst` | `CyberPass123!` |
+        | 📊 Data Science | `data_scientist` | `DataPass123!` |
+        | 💻 IT Operations | `it_engineer` | `ITPass123!` |
+        | 👑 Administrator | `admin` | `AdminPass123!` |
         """)
 
-# ========== REGISTER TAB ==========
 with tab_register:
-    st.subheader("Create New Account")
+    st.markdown("#### Create your account")
+    st.caption("Join the platform to access domain-specific tools")
     
-    with st.form("register_form"):
-        new_username = st.text_input(
-            "Choose Username",
-            placeholder="Enter a unique username",
-            key="register_username",
-            help="Username must be unique"
-        )
-        new_password = st.text_input(
-            "Choose Password",
-            type="password",
-            placeholder="Minimum 8 characters",
-            key="register_password",
-            help="Password must be at least 8 characters long"
-        )
-        confirm_password = st.text_input(
-            "Confirm Password",
-            type="password",
-            placeholder="Re-enter your password",
-            key="register_confirm"
-        )
+    with st.form("register_form", clear_on_submit=True):
+        new_user = st.text_input("Username", placeholder="Choose a username", key="reg_user")
         
-        # Role selection with descriptions
-        st.markdown("**Select Your Domain:**")
-        user_role = st.selectbox(
-            "Domain Role",
-            options=["cybersecurity", "datascience", "itoperations"],
+        col1, col2 = st.columns(2)
+        with col1:
+            new_pass = st.text_input("Password", type="password", placeholder="Min 8 characters", key="reg_pass")
+        with col2:
+            confirm = st.text_input("Confirm", type="password", placeholder="Re-enter password", key="reg_confirm")
+        
+        role = st.selectbox("Select your role", ["cybersecurity", "datascience", "itoperations"],
             format_func=lambda x: {
-                'cybersecurity': '🛡️ Cybersecurity Analyst',
-                'datascience': '📊 Data Scientist',
-                'itoperations': '💻 IT Operations Engineer'
-            }[x],
-            help="Choose the domain you'll work in"
-        )
+                "cybersecurity": "🛡️ Cybersecurity Analyst", 
+                "datascience": "📊 Data Scientist",
+                "itoperations": "💻 IT Operations Engineer"
+            }[x])
         
-        # Show role description
-        role_descriptions = {
-            'cybersecurity': 'Access security incident management and threat analysis',
-            'datascience': 'Access dataset analytics and data science tools',
-            'itoperations': 'Access IT ticketing system and infrastructure management'
+        # role description
+        role_desc = {
+            "cybersecurity": "Access security incidents, threat analysis, and AI-powered incident response.",
+            "datascience": "Manage datasets, analytics tools, and ML recommendations.",
+            "itoperations": "Handle IT tickets, troubleshooting, and infrastructure support."
         }
-        st.caption(role_descriptions[user_role])
+        st.caption(f"ℹ️ {role_desc[role]}")
         
-        submitted = st.form_submit_button("📝 Create Account", use_container_width=True, type="primary")
+        agree = st.checkbox("I agree to the terms of service and privacy policy")
         
-        if submitted:
-            # Validation
-            if not new_username or not new_password or not confirm_password:
-                st.error("⚠️ Please fill in all fields")
-            elif len(new_password) < 8:
-                st.error("⚠️ Password must be at least 8 characters long")
-            elif new_password != confirm_password:
-                st.error("⚠️ Passwords do not match")
+        submit = st.form_submit_button("Create Account", use_container_width=True, type="primary")
+        
+        if submit:
+            if not new_user or not new_pass or not confirm:
+                st.error("Please fill in all fields")
+            elif len(new_pass) < 8:
+                st.error("Password must be at least 8 characters")
+            elif new_pass != confirm:
+                st.error("Passwords do not match")
+            elif not agree:
+                st.error("Please accept the terms to continue")
             else:
-                # Register user
-                success, message = auth.register_user(new_username, new_password, user_role)
-                
+                success, message = auth.register_user(new_user, new_pass, role)
                 if success:
                     st.success(f"✅ {message}")
-                    st.info("👈 You can now login using the **Login** tab")
+                    st.info("You can now sign in with your credentials")
                 else:
                     st.error(f"❌ {message}")
 
-# Footer
-st.divider()
-st.caption("🔒 Secure authentication powered by bcrypt | Role-based access control enabled")
-st.caption("CST1510 Multi-Domain Intelligence Platform | Middlesex University")
+# platform features
+st.markdown("---")
+st.markdown("#### Platform Features")
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.markdown("""
+    **🛡️ Cybersecurity**
+    
+    Incident tracking, threat analysis, and AI-powered security insights.
+    """)
+
+with col2:
+    st.markdown("""
+    **📊 Data Science**
+    
+    Dataset management, analytics, and ML recommendations.
+    """)
+
+with col3:
+    st.markdown("""
+    **💻 IT Operations**
+    
+    Ticket management, troubleshooting, and workload analytics.
+    """)
+
+#stats row
+st.markdown("---")
+col1, col2, col3, col4 = st.columns(4)
+with col1:
+    st.metric("Security Incidents", stats["incidents"])
+with col2:
+    st.metric("Datasets", stats["datasets"])
+with col3:
+    st.metric("IT Tickets", stats["tickets"])
+with col4:
+    st.metric("Active Users", stats["users"])
+
+# security notice
+st.markdown("""
+<div class="security-notice">
+    <p>🔒 <strong>Secure Connection</strong> — Your data is protected with bcrypt encryption and role-based access control.</p>
+</div>
+""", unsafe_allow_html=True)
+
+# --footer--
+st.markdown(f"""
+<div class="footer-text">
+    <p>Multi-Domain Intelligence Platform • CST1510 • {datetime.now().strftime('%Y')}</p>
+    <p style="font-size: 0.7rem; margin-top: 5px;">Version 2.0 • Last updated: {datetime.now().strftime('%B %d, %Y')}</p>
+</div>
+""", unsafe_allow_html=True)

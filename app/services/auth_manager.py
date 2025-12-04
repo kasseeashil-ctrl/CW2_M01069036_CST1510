@@ -62,7 +62,7 @@ class AuthManager:
         if not username or not password:
             return False, None, "Username and password cannot be empty"
         
-        # Fetch user from database
+        # Fetches user from database
         row = self._db.fetch_one(
             "SELECT id, username, password_hash, role FROM users WHERE username = ?",
             (username,)
