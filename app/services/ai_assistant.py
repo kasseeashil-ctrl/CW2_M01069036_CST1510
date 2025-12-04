@@ -12,7 +12,7 @@ class AIAssistant:
     Wrapper for OpenAI API with domain-specific system prompts.
     
     Provides specialised AI assistance for Cybersecurity, Data Science,
-    and IT Operations domains with context-aware responses.
+    and Operations domains with context-aware responses.
     """
     
     # Domain-specific system prompts
