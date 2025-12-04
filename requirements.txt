@@ -1,0 +1,20 @@
+
+# Core dependencies with pre-built wheels
+streamlit>=1.39.0
+plotly>=5.24.0
+python-dotenv>=1.0.0
+
+# Use pre-built NumPy and pandas (Python 3.13 compatible)
+# Install NumPy first, then pandas
+numpy==1.26.4  # Last version with pre-built wheels for 3.13
+pandas==2.1.4  # Compatible with NumPy 1.26.4
+
+# Authentication - if this fails, see alternative below
+bcrypt>=4.2.0
+
+# AI Integration
+google-generativeai>=0.3.0
+
+# Additional utilities
+setuptools>=75.0.0
+wheel>=0.44.0

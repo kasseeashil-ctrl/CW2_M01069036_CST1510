@@ -1,0 +1,28 @@
+# Secrets - NEVER COMMIT THESE!
+.streamlit/secrets.toml
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Database (optional - remove if you want to commit DB)
+DATA/intelligence_platform.db
+
+# OS
+.DS_Store
+Thumbs.db
