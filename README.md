@@ -1,353 +1,180 @@
-# 🛡️ Multi-Domain Intelligence Platform
+# Multi-Domain Intelligence Platform
 
-A professional web-based intelligence platform integrating **Cybersecurity**, **Data Science**, and **IT Operations** with AI-powered analysis.
+A web application for managing cybersecurity incidents, datasets, and IT support tickets. Built with Streamlit and Python.
 
-## 📋 Table of Contents
+## Overview
 
-- [Features](#features)
-- [Architecture](#architecture)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Usage](#usage)
-- [Project Structure](#project-structure)
-- [Demo Accounts](#demo-accounts)
-- [Technologies Used](#technologies-used)
+This platform provides a centralised dashboard for three IT domains:
 
----
+- **Cybersecurity** - Security incident tracking and threat analysis
+- **Data Science** - Dataset management and analytics
+- **IT Operations** - Support ticket management and troubleshooting
 
-## ✨ Features
+The system uses role-based access control, so users only see the domains relevant to their job role. An integrated AI assistant (powered by Google Gemini) provides analysis and recommendations for each domain.
 
-### 🛡️ Cybersecurity Domain
-- **Incident Management** - Track and manage security incidents
-- **Severity Classification** - Categorise threats by severity level
-- **AI-Powered Analysis** - Get expert recommendations for incident response
-- **Real-time Dashboards** - Visualise incident statistics with interactive charts
-
-### 📊 Data Science Domain
-- **Dataset Registry** - Manage metadata for datasets
-- **Storage Analytics** - Track dataset sizes and record counts
-- **AI Insights** - Get recommendations for data analysis techniques
-- **Visual Analytics** - Explore data characteristics with Plotly charts
-
-### 💻 IT Operations Domain
-- **Ticket System** - Create and manage support tickets
-- **Priority Management** - Prioritise critical issues
-- **AI Troubleshooting** - Get step-by-step resolution guides
-- **Assignment Tracking** - Monitor ticket assignments and resolution
-
-### 🤖 AI Assistant
-- **Domain-Specific Expertise** - Specialised AI for each domain
-- **Context-Aware Responses** - AI remembers conversation history
-- **Streaming Interface** - Real-time response generation
-- **Cross-Domain Support** - General AI for multi-domain questions
-
----
-
-## 🏗️ Architecture
-
-### Object-Oriented Design
-
-```
-├── Models (Entity Classes)
-│   ├── User - Authentication and role management
-│   ├── SecurityIncident - Cybersecurity domain entities
-│   ├── Dataset - Data Science domain entities
-│   └── ITTicket - IT Operations domain entities
-│
-├── Services (Business Logic)
-│   ├── DatabaseManager - Database connection and query execution
-│   ├── AuthManager - User authentication and password security
-│   └── AIAssistant - OpenAI API integration with domain prompts
-│
-└── Views (Streamlit Pages)
-    ├── Home.py - Login and registration
-    ├── Cybersecurity.py - Security incident dashboard
-    ├── Data_Science.py - Dataset management dashboard
-    ├── IT_Operations.py - IT ticket dashboard
-    └── AI_Assistant.py - General AI chat interface
-```
-
-### Database Schema
-
-**Users Table**
-- Authentication with bcrypt password hashing
-- Role-based access control (user, analyst, admin)
-
-**Cyber Incidents Table**
-- Incident tracking with severity levels
-- Status management (Open, Investigating, Resolved, Closed)
-- Foreign key to users (reported_by)
-
-**Datasets Metadata Table**
-- Dataset registry with size and record tracking
-- Category classification
-- Update history
-
-**IT Tickets Table**
-- Support ticket management
-- Priority and status tracking
-- Assignment to staff members
-
----
-
-## 🚀 Installation
-
-### Prerequisites
+## Requirements
 
 - Python 3.8 or higher
-- pip (Python package manager)
-- OpenAI API key ([Get one here](https://platform.openai.com/api-keys))
+- Google Gemini API key
 
-### Step 1: Clone or Download the Project
+## Installation
 
+1. Clone the repository:
 ```bash
-# If using Git
-git clone <your-repository-url>
-cd CW2_M0123456_CST1510
-
-# Or download and extract the ZIP file
+git clone https://github.com/yourusername/your-repo.git
+cd your-repo
 ```
 
-### Step 2: Create Virtual Environment (Recommended)
-
+2. Create and activate a virtual environment:
 ```bash
 # Windows
 python -m venv venv
 venv\Scripts\activate
 
-# macOS/Linux
-python3 -m venv venv
-source venv/bin/activate
-```
-
-### Step 3: Install Dependencies
-
+3. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-### Step 4: Configure Secrets
-
-Create `.streamlit/secrets.toml` with your API key:
-
+4. Create the secrets file at `.streamlit/secrets.toml`:
 ```toml
-OPENAI_API_KEY = "sk-proj-your-actual-key-here"
+GEMINI_API_KEY = "your-api-key-here"
 DB_PATH = "DATA/intelligence_platform.db"
 ```
 
-**⚠️ IMPORTANT:** Never commit this file to Git!
-
-### Step 5: Set Up Database
-
+5. Initialise the database:
 ```bash
 python setup_database.py
 ```
 
-This will:
-- Create all database tables
-- Create demo user accounts
-- Load sample data
-
-### Step 6: Run the Application
-
+6. Run the application:
 ```bash
 streamlit run Home.py
 ```
 
-The application will open in your browser at `http://localhost:8501`
+The app will open at `http://localhost:8501`
 
----
-
-## ⚙️ Configuration
-
-### Environment Variables
-
-All secrets are managed in `.streamlit/secrets.toml`:
-
-```toml
-# OpenAI API Configuration
-OPENAI_API_KEY = "your-api-key-here"
-
-# Database Configuration
-DB_PATH = "DATA/intelligence_platform.db"
-```
-
-### Security Settings
-
-- **Password Hashing:** bcrypt with automatic salt generation
-- **SQL Injection Protection:** Parameterised queries throughout
-- **Session Management:** Streamlit session state for authentication
-- **API Key Security:** Stored in secrets.toml (gitignored)
-
----
-
-## 📖 Usage
-
-### 1. Login
-
-- Navigate to `http://localhost:8501`
-- Use one of the demo accounts (see below)
-- Or register a new account
-
-### 2. Navigate Domains
-
-Use the sidebar to access:
-- 🛡️ **Cybersecurity** - View and manage security incidents
-- 📊 **Data Science** - Explore and analyse datasets
-- 💻 **IT Operations** - Manage support tickets
-- 🤖 **AI Assistant** - Chat with domain-specific AI
-
-### 3. Use AI Features
-
-In each domain dashboard:
-1. Select an item (incident/dataset/ticket)
-2. Click "Analyse with AI"
-3. Get expert recommendations
-4. Ask follow-up questions
-
-### 4. General AI Chat
-
-Go to the AI Assistant page for:
-- Cross-domain questions
-- General guidance
-- Learning about platform features
-
----
-
-## 📁 Project Structure
+## Project Structure
 
 ```
-CW2_M0123456_CST1510/
+├── Home.py                     # Login and registration page
+├── setup_database.py           # Database initialisation script
+├── requirements.txt
 │
 ├── app/
-│   ├── models/                  # Entity classes (OOP)
+│   ├── models/                 # Entity classes
 │   │   ├── user.py
-│   │   ├── security_incident.py
+│   │   ├── security_incidents.py
 │   │   ├── dataset.py
-│   │   └── it_ticket.py
+│   │   └── it_tickets.py
 │   │
-│   ├── services/                # Business logic
+│   ├── services/               # Business logic
 │   │   ├── database_manager.py
 │   │   ├── auth_manager.py
 │   │   └── ai_assistant.py
 │   │
-│   └── data/                    # Database schema
-│       └── schema.py
+│   └── data/
+│       └── schema.py           # Database table definitions
 │
-├── pages/                       # Streamlit pages
+├── pages/
 │   ├── 1_🛡️_Cybersecurity.py
 │   ├── 2_📊_Data_Science.py
 │   ├── 3_💻_IT_Operations.py
 │   └── 4_🤖_AI_Assistant.py
 │
-├── DATA/                        # Data files
-│   ├── intelligence_platform.db
-│   ├── cyber_incidents.csv (optional)
-│   ├── datasets_metadata.csv (optional)
-│   └── it_tickets.csv (optional)
+├── DATA/
+│   └── intelligence_platform.db
 │
-├── .streamlit/
-│   └── secrets.toml             # API keys (DO NOT COMMIT)
-│
-├── Home.py                      # Main entry point
-├── setup_database.py            # Database setup script
-├── requirements.txt             # Python dependencies
-├── .gitignore                   # Git ignore rules
-└── README.md                    # This file
+└── .streamlit/
+    └── secrets.toml            # API keys (not tracked in git)
 ```
 
----
+## Demo Accounts
 
-## 🔐 Demo Accounts
+The setup script creates these test accounts:
 
-After running `setup_database.py`, these accounts are available:
+| Role | Username | Password |
+|------|----------|----------|
+| Cybersecurity Analyst | cyber_analyst | CyberPass123! |
+| Data Scientist | data_scientist | DataPass123! |
+| IT Engineer | it_engineer | ITPass123! |
+| Administrator | admin | AdminPass123! |
 
-| Username | Password | Role | Access Level |
-|----------|----------|------|--------------|
-| `admin` | `AdminPass123!` | Admin | Full access to all features |
-| `analyst` | `SecurePass123!` | Analyst | Enhanced analysis capabilities |
-| `user` | `UserPass123!` | User | Standard access |
-| `alice` | `AlicePass123!` | Analyst | Sample analyst account |
-| `bob` | `BobPass123!` | User | Sample user account |
+Each role can only access their respective domain. The admin account has access to all domains.
 
-**Security Note:** Change these passwords in a production environment!
-
----
-
-## 🛠️ Technologies Used
-
-### Core Framework
-- **Streamlit** - Web application framework
-- **Python 3.8+** - Programming language
-
-### Database
-- **SQLite** - Embedded database
-- **sqlite3** - Python database interface
+## Features
 
 ### Authentication
-- **bcrypt** - Secure password hashing
+- Secure password hashing with bcrypt
+- Role-based access control
+- Session management with Streamlit
+
+### Dashboards
+Each domain dashboard includes:
+- Summary metrics
+- Interactive charts (Plotly)
+- Data tables with filtering
+- CRUD operations for records
+- AI-powered analysis
 
 ### AI Integration
-- **OpenAI GPT-4o** - AI-powered analysis
-- **openai** Python library
+- Google Gemini API (gemini-2.0-flash model)
+- Dashboard analysis - summarises current metrics
+- Item analysis - detailed review of selected records
+- Domain-specific insights - threat intelligence, ML recommendations, SLA analysis
+- Streaming responses for better UX
 
-### Data & Visualisation
-- **pandas** - Data manipulation
-- **Plotly** - Interactive charts
-- **NumPy** - Numerical operations
+## Database Schema
 
-### Development
-- **PyCharm** - IDE
-- **Git** - Version control
+**users** - Authentication and role management
+- id, username, password_hash, role
 
----
+**cyber_incidents** - Security incident records
+- id, date, incident_type, severity, status, description, reported_by
 
-## 🐛 Troubleshooting
+**datasets_metadata** - Dataset registry
+- id, dataset_name, category, source, last_updated, record_count, file_size_mb
 
-### "ModuleNotFoundError"
-**Solution:** Make sure you've activated the virtual environment and installed dependencies:
-```bash
-pip install -r requirements.txt
-```
+**it_tickets** - Support tickets
+- id, ticket_id, priority, status, category, subject, description, created_date, resolved_date, assigned_to
 
-### "AuthenticationError: Invalid API Key"
-**Solution:** Check that your `.streamlit/secrets.toml` has the correct API key format:
+## Technologies
+
+- **Frontend**: Streamlit
+- **Database**: SQLite
+- **Charts**: Plotly
+- **Authentication**: bcrypt
+- **AI**: Google Gemini API
+- **Language**: Python 3.8+
+
+## Configuration
+
+All configuration is stored in `.streamlit/secrets.toml`:
+
 ```toml
-OPENAI_API_KEY = "sk-proj-..."
+GEMINI_API_KEY = "your-gemini-api-key"
+DB_PATH = "DATA/intelligence_platform.db"
 ```
 
-### "Database is locked"
-**Solution:** Close all connections to the database and restart the application.
+## Troubleshooting
 
-### Pages not showing in sidebar
-**Solution:** Make sure all page files in the `pages/` directory start with a number (e.g., `1_`, `2_`, etc.)
+**ModuleNotFoundError**  
+Make sure you've activated the virtual environment and run `pip install -r requirements.txt`
 
----
+**AI features not working**  
+Check that your API key is correctly set in `.streamlit/secrets.toml`
 
-## 📝 License
+**Access Denied error**  
+You're trying to access a domain your role doesn't have permission for. Log in with the admin account to access all domains.
 
-This project is created for educational purposes as part of CST1510 coursework.
+**Database errors**  
+Delete the database file and run `python setup_database.py` again to reset.
 
----
+## Author
 
-## 👨‍💻 Author
+Student ID: M01069036  
+Course: CST1510  
+Middlesex University
 
-**Student ID:** M0123456  
-**Course:** CST1510 - Programming for Data Science  
-**Institution:** Middlesex University  
-**Year:** 2024
-
----
-
-## 🙏 Acknowledgements
-
-- Streamlit for the excellent web framework
-- OpenAI for GPT-4o API access
-- Plotly for interactive visualisations
-- Week 8, 9, 10, 11 lab materials and tutorials
-
----
-
-**🚀 Ready to explore the Multi-Domain Intelligence Platform!**
-
-For questions or issues, please contact your course instructor.
+## License
+This project was created for educational purposes as part of CST1510 coursework.
