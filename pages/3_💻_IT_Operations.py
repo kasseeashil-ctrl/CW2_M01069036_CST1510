@@ -5,11 +5,10 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
-import random
+import os
 
 from app.services.database_manager import DatabaseManager
 from app.services.ai_assistant import GeminiClient
-from app.models.it_tickets import ITTicket
 
 # Page configuration
 st.set_page_config(page_title="IT Operations | Intelligence Platform", page_icon="💻", layout="wide")
@@ -60,8 +59,7 @@ st.divider()
 with st.sidebar:
     st.header("🔧 Filters")
     priority_filter = st.multiselect("Priority", ["Low", "Medium", "High", "Critical"])
-    status_filter = st.multiselect("Status", ["Open", "In Progress", "Resolved", "Closed"])
-    cat_filter = st.multiselect("Category", ["Hardware", "Software", "Network", "Security", "Access"])
+    status_filter = st.multiselect("Status", ["Open", "In Progress", "Resolved", "Waiting for User"])
     
     st.divider()
     if st.button("🔄 Refresh", use_container_width=True):
@@ -70,31 +68,33 @@ with st.sidebar:
     
     show_add = st.button("➕ New Ticket", use_container_width=True, type="primary")
 
-#Load Ticket Data
+#Load Ticket Data from CSV
 @st.cache_data(ttl=60)
 def load_tickets():
-    """Fetch all tickets from database"""
-    rows = db.fetch_all("SELECT id, ticket_id, priority, status, category, subject, description, created_date, resolved_date, assigned_to FROM it_tickets ORDER BY created_date DESC")
-    return [ITTicket(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9]) for r in rows]
+    """Load tickets from CSV file"""
+    csv_path = "DATA/it_tickets.csv"
+    if os.path.exists(csv_path):
+        df = pd.read_csv(csv_path)
+        # Rename columns to match expected format
+        df = df.rename(columns={
+            'ticket_id': 'ID',
+            'priority': 'Priority',
+            'description': 'Description',
+            'status': 'Status',
+            'assigned_to': 'Assigned',
+            'created_at': 'Created',
+            'resolution_time_hours': 'Resolution Hours'
+        })
+        return df
+    return pd.DataFrame()
 
-tickets = load_tickets()
-
-def to_df(data):
-    """Convert ITTicket objects to DataFrame for analysis"""
-    return pd.DataFrame([{
-        "ID": t.get_id(), "Ticket": t.get_ticket_number(), "Priority": t.get_priority(),
-        "Status": t.get_status(), "Category": t.get_category(), "Subject": t.get_subject(),
-        "Created": t.get_created_date(), "Assigned": t.get_assigned_to()
-    } for t in data])
-
-df = to_df(tickets)
+df = load_tickets()
 
 # Applying sidebar filters
 if not df.empty:
     df_f = df.copy()
     if priority_filter: df_f = df_f[df_f["Priority"].isin(priority_filter)]
     if status_filter: df_f = df_f[df_f["Status"].isin(status_filter)]
-    if cat_filter: df_f = df_f[df_f["Category"].isin(cat_filter)]
 else:
     df_f = df
 
@@ -102,14 +102,14 @@ else:
 st.subheader("📊 Operations Overview")
 m1, m2, m3, m4, m5 = st.columns(5)
 
-total = len(tickets)
-active = len([t for t in tickets if t.is_open()])
-critical = len([t for t in tickets if t.is_critical()])
-assigned = len([t for t in tickets if t.is_assigned()])
-resolved = total - active
+total = len(df)
+active = len(df[df["Status"].isin(["Open", "In Progress"])]) if not df.empty else 0
+critical = len(df[df["Priority"] == "Critical"]) if not df.empty else 0
+assigned = len(df[df["Assigned"].notna()]) if not df.empty else 0
+resolved = len(df[df["Status"] == "Resolved"]) if not df.empty else 0
 
 m1.metric("Total Tickets", total)
-m2.metric("Active", active, delta=f"+{random.randint(0,2)}" if active > 0 else None, delta_color="inverse")
+m2.metric("Active", active)
 m3.metric("Critical", critical)
 m4.metric("Assigned", assigned)
 m5.metric("Resolved", resolved)
@@ -167,25 +167,26 @@ if not df_f.empty:
         fig.update_layout(height=300)
         st.plotly_chart(fig, use_container_width=True)
     
-    # Row 2: Category breakdown and timeline
+    # Row 2: Assigned breakdown and timeline
     c4, c5 = st.columns(2)
     
     with c4:
-        # Horizontal bar chart by category
-        cat_counts = df_f["Category"].value_counts()
+        # Horizontal bar chart by assigned person
+        assigned_counts = df_f["Assigned"].value_counts()
         fig = go.Figure(data=[go.Bar(
-            y=cat_counts.index, x=cat_counts.values, orientation='h',
-            marker_color='#3b82f6', text=cat_counts.values, textposition='auto'
+            y=assigned_counts.index, x=assigned_counts.values, orientation='h',
+            marker_color='#3b82f6', text=assigned_counts.values, textposition='auto'
         )])
-        fig.update_layout(title="By Category", height=300)
+        fig.update_layout(title="By Assigned Staff", height=300)
         st.plotly_chart(fig, use_container_width=True)
     
     with c5:
         # Area chart showing ticket creation trend
         df_time = df_f.copy()
         df_time['Created'] = pd.to_datetime(df_time['Created'])
-        daily = df_time.groupby('Created').size().reset_index(name='Count')
-        fig = px.area(daily, x='Created', y='Count', title="Ticket Trend")
+        daily = df_time.groupby(df_time['Created'].dt.date).size().reset_index(name='Count')
+        daily.columns = ['Date', 'Count']
+        fig = px.area(daily, x='Date', y='Count', title="Ticket Trend")
         fig.update_traces(fill='tozeroy', line_color='#3b82f6', fillcolor='rgba(59,130,246,0.3)')
         fig.update_layout(height=300)
         st.plotly_chart(fig, use_container_width=True)
@@ -194,18 +195,18 @@ if not df_f.empty:
     c6, c7 = st.columns(2)
     
     with c6:
-        # Heatmap showing category vs priority correlation
-        cross = pd.crosstab(df_f['Category'], df_f['Priority'])
-        fig = px.imshow(cross, text_auto=True, color_continuous_scale='Blues', title="Category vs Priority")
+        # Heatmap showing assigned vs priority correlation
+        cross = pd.crosstab(df_f['Assigned'], df_f['Priority'])
+        fig = px.imshow(cross, text_auto=True, color_continuous_scale='Blues', title="Staff vs Priority")
         fig.update_layout(height=300)
         st.plotly_chart(fig, use_container_width=True)
     
     with c7:
         # Funnel chart showing ticket pipeline flow
         funnel_data = df_f["Status"].value_counts()
-        order = ["Open", "In Progress", "Resolved", "Closed"]
+        order = ["Open", "In Progress", "Waiting for User", "Resolved"]
         funnel_sorted = [funnel_data.get(s, 0) for s in order]
-        colors_f = ['#ef4444', '#f59e0b', '#3b82f6', '#6b7280']
+        colors_f = ['#ef4444', '#f59e0b', '#a855f7', '#3b82f6']
         fig = go.Figure(go.Funnel(y=order, x=funnel_sorted, marker_color=colors_f))
         fig.update_layout(title="Ticket Pipeline", height=300)
         st.plotly_chart(fig, use_container_width=True)
@@ -221,21 +222,21 @@ st.subheader("🔍 Ticket Management")
 if not df_f.empty:
     # Ticket selection dropdown
     selected_id = st.selectbox("Select Ticket", df_f["ID"].tolist(),
-        format_func=lambda x: f"{df_f[df_f['ID']==x]['Ticket'].values[0]} | {df_f[df_f['ID']==x]['Priority'].values[0]} | {df_f[df_f['ID']==x]['Subject'].values[0][:30]}")
+        format_func=lambda x: f"TICK-{int(x):04d} | {df_f[df_f['ID']==x]['Priority'].values[0]} | {df_f[df_f['ID']==x]['Description'].values[0][:30]}")
     
     # Data table display
-    st.dataframe(df_f, use_container_width=True, hide_index=True)
+    st.dataframe(df_f[['ID', 'Priority', 'Status', 'Assigned', 'Created', 'Description']], use_container_width=True, hide_index=True)
     
     # Get selected ticket details
-    selected = next(t for t in tickets if t.get_id() == selected_id)
+    selected_ticket = df_f[df_f['ID'] == selected_id].iloc[0]
     
     # Ticket detail cards
     st.divider()
     d1, d2, d3, d4 = st.columns(4)
-    d1.markdown(f"**Priority:** {selected.get_priority()}")
-    d2.markdown(f"**Status:** {selected.get_status()}")
-    d3.markdown(f"**Category:** {selected.get_category()}")
-    d4.markdown(f"**Assigned:** {selected.get_assigned_to()}")
+    d1.markdown(f"**Priority:** {selected_ticket['Priority']}")
+    d2.markdown(f"**Status:** {selected_ticket['Status']}")
+    d3.markdown(f"**Resolution Time:** {selected_ticket['Resolution Hours']}h")
+    d4.markdown(f"**Assigned:** {selected_ticket['Assigned']}")
     
     # Ticket action controls
     a1, a2, a3 = st.columns(3)
@@ -243,25 +244,35 @@ if not df_f.empty:
         new_assign = st.text_input("Assign to:", key=f"assign_{selected_id}")
         if st.button("👤 Assign", key=f"btn_a_{selected_id}"):
             if new_assign:
-                db.execute_query("UPDATE it_tickets SET assigned_to=?, status='In Progress' WHERE id=?", (new_assign, selected_id))
+                # Update CSV
+                csv_path = "DATA/it_tickets.csv"
+                update_df = pd.read_csv(csv_path)
+                update_df.loc[update_df['ticket_id'] == selected_id, 'assigned_to'] = new_assign
+                update_df.loc[update_df['ticket_id'] == selected_id, 'status'] = 'In Progress'
+                update_df.to_csv(csv_path, index=False)
                 st.success("✅ Assigned")
                 st.cache_data.clear()
                 st.rerun()
     
     with a2:
-        new_status = st.selectbox("Status:", ["Open", "In Progress", "Resolved", "Closed"], key=f"status_{selected_id}")
+        new_status = st.selectbox("Status:", ["Open", "In Progress", "Resolved", "Waiting for User"], key=f"status_{selected_id}")
         if st.button("🔄 Update", key=f"btn_s_{selected_id}"):
-            resolved = str(datetime.today().date()) if new_status in ["Resolved", "Closed"] else None
-            db.execute_query("UPDATE it_tickets SET status=?, resolved_date=? WHERE id=?", (new_status, resolved, selected_id))
+            csv_path = "DATA/it_tickets.csv"
+            update_df = pd.read_csv(csv_path)
+            update_df.loc[update_df['ticket_id'] == selected_id, 'status'] = new_status
+            update_df.to_csv(csv_path, index=False)
             st.success("✅ Updated")
             st.cache_data.clear()
             st.rerun()
     
     with a3:
         st.write("")
-        if st.button("✅ Close", key=f"btn_c_{selected_id}", type="primary"):
-            db.execute_query("UPDATE it_tickets SET status='Closed', resolved_date=? WHERE id=?", (str(datetime.today().date()), selected_id))
-            st.success("✅ Closed")
+        if st.button("✅ Resolve", key=f"btn_c_{selected_id}", type="primary"):
+            csv_path = "DATA/it_tickets.csv"
+            update_df = pd.read_csv(csv_path)
+            update_df.loc[update_df['ticket_id'] == selected_id, 'status'] = 'Resolved'
+            update_df.to_csv(csv_path, index=False)
+            st.success("✅ Resolved")
             st.cache_data.clear()
             st.rerun()
     
@@ -281,14 +292,23 @@ if not df_f.empty:
         
         # Individual AI analysis handlers
         if btn1:
+            ticket_context = f"""
+Ticket ID: {selected_ticket['ID']}
+Priority: {selected_ticket['Priority']}
+Status: {selected_ticket['Status']}
+Assigned To: {selected_ticket['Assigned']}
+Created: {selected_ticket['Created']}
+Resolution Time: {selected_ticket['Resolution Hours']} hours
+Description: {selected_ticket['Description']}
+"""
             messages = [
                 {"role": "system", "content": "You're an IT support specialist. Be concise."},
-                {"role": "user", "content": f"Troubleshoot:\n{selected.get_ai_context()}"}
+                {"role": "user", "content": f"Troubleshoot:\n{ticket_context}"}
             ]
             with st.chat_message("assistant"):
                 container = st.empty()
                 full = ""
-                for chunk in client.chat.completions.create(model="gemini-2.0-flash", messages=messages, stream=True):
+                for chunk in client.chat.completions.create(model="gemini-2.0-flash", messages=messages, stream=True, domain="IT Operations"):
                     if chunk.choices[0].delta.content:
                         full += chunk.choices[0].delta.content
                         container.markdown(full + "▌")
@@ -297,8 +317,9 @@ if not df_f.empty:
         if btn2:
             summary = f"""IT Summary:
 - Total: {total}, Active: {active}, Critical: {critical}, Assigned: {assigned}
-- Categories: {df_f['Category'].value_counts().to_dict()}
-- Priorities: {df_f['Priority'].value_counts().to_dict()}"""
+- Staff Workload: {df_f['Assigned'].value_counts().to_dict()}
+- Priorities: {df_f['Priority'].value_counts().to_dict()}
+- Status: {df_f['Status'].value_counts().to_dict()}"""
             messages = [
                 {"role": "system", "content": "You're an IT operations analyst."},
                 {"role": "user", "content": f"Workload analysis:\n{summary}"}
@@ -306,21 +327,22 @@ if not df_f.empty:
             with st.chat_message("assistant"):
                 container = st.empty()
                 full = ""
-                for chunk in client.chat.completions.create(model="gemini-2.0-flash", messages=messages, stream=True):
+                for chunk in client.chat.completions.create(model="gemini-2.0-flash", messages=messages, stream=True, domain="IT Operations"):
                     if chunk.choices[0].delta.content:
                         full += chunk.choices[0].delta.content
                         container.markdown(full + "▌")
                 container.markdown(full)
         
         if btn3:
+            avg_resolution = df_f['Resolution Hours'].mean() if not df_f.empty else 0
             messages = [
                 {"role": "system", "content": "You're an IT service manager."},
-                {"role": "user", "content": f"SLA recommendations for {active} active, {critical} critical tickets."}
+                {"role": "user", "content": f"SLA recommendations for {active} active, {critical} critical tickets. Average resolution time: {avg_resolution:.1f} hours."}
             ]
             with st.chat_message("assistant"):
                 container = st.empty()
                 full = ""
-                for chunk in client.chat.completions.create(model="gemini-2.0-flash", messages=messages, stream=True):
+                for chunk in client.chat.completions.create(model="gemini-2.0-flash", messages=messages, stream=True, domain="IT Operations"):
                     if chunk.choices[0].delta.content:
                         full += chunk.choices[0].delta.content
                         container.markdown(full + "▌")
@@ -330,13 +352,13 @@ if not df_f.empty:
         st.divider()
         q = st.chat_input("Ask about IT...")
         if q:
-            messages = [{"role": "system", "content": "You're an IT assistant."}, {"role": "user", "content": q}]
+            messages = [{"role": "system", "content": "You're an IT assistant. Only use IT operations ticket data from this dashboard."}, {"role": "user", "content": q}]
             with st.chat_message("user"):
                 st.markdown(q)
             with st.chat_message("assistant"):
                 container = st.empty()
                 full = ""
-                for chunk in client.chat.completions.create(model="gemini-2.0-flash", messages=messages, stream=True):
+                for chunk in client.chat.completions.create(model="gemini-2.0-flash", messages=messages, stream=True, domain="IT Operations"):
                     if chunk.choices[0].delta.content:
                         full += chunk.choices[0].delta.content
                         container.markdown(full + "▌")
@@ -350,30 +372,45 @@ if show_add:
     st.subheader("➕ Create Ticket")
     
     with st.form("new_ticket"):
-        c1, c2, c3 = st.columns(3)
+        c1, c2 = st.columns(2)
         with c1:
-            ticket_num = st.text_input("Ticket #", f"TICK-{len(tickets)+1:04d}", disabled=True)
+            new_ticket_id = df['ID'].max() + 1 if not df.empty else 2000
+            ticket_num = st.text_input("Ticket #", f"TICK-{int(new_ticket_id):04d}", disabled=True)
             priority = st.selectbox("Priority", ["Low", "Medium", "High", "Critical"], index=1)
         with c2:
-            category = st.selectbox("Category", ["Hardware", "Software", "Network", "Security", "Access", "Other"])
             status = st.selectbox("Status", ["Open", "In Progress"])
-        with c3:
-            assigned = st.text_input("Assign To (optional)")
-            created = st.date_input("Created", datetime.today())
+            assigned_to = st.text_input("Assign To (optional)")
         
-        subject = st.text_input("Subject", placeholder="Brief summary")
-        desc = st.text_area("Description", placeholder="Details...", height=100)
+        desc = st.text_area("Description", placeholder="Describe the issue...", height=100)
         
         if st.form_submit_button("🚀 Create", use_container_width=True, type="primary"):
-            if subject and desc and len(desc) >= 20:
-                db.execute_query(
-                    "INSERT INTO it_tickets (ticket_id, priority, status, category, subject, description, created_date, assigned_to) VALUES (?,?,?,?,?,?,?,?)",
-                    (ticket_num, priority, status, category, subject, desc, str(created), assigned or None))
-                st.success(f"✅ Created {ticket_num}")
+            if desc and len(desc) >= 20:
+                # Load existing CSV, add new row, save back
+                csv_path = "DATA/it_tickets.csv"
+                if os.path.exists(csv_path):
+                    existing_df = pd.read_csv(csv_path)
+                    new_id = existing_df['ticket_id'].max() + 1
+                else:
+                    existing_df = pd.DataFrame(columns=['ticket_id', 'priority', 'description', 'status', 'assigned_to', 'created_at', 'resolution_time_hours'])
+                    new_id = 2000
+                
+                new_row = pd.DataFrame([{
+                    'ticket_id': new_id,
+                    'priority': priority,
+                    'description': desc,
+                    'status': status,
+                    'assigned_to': assigned_to if assigned_to else None,
+                    'created_at': f"{datetime.today().date()} 00:00:00",
+                    'resolution_time_hours': 0
+                }])
+                updated_df = pd.concat([existing_df, new_row], ignore_index=True)
+                os.makedirs("DATA", exist_ok=True)
+                updated_df.to_csv(csv_path, index=False)
+                st.success(f"✅ Created TICK-{int(new_id):04d}")
                 st.cache_data.clear()
                 st.rerun()
             else:
-                st.error("Subject and description (20+ chars) required")
+                st.error("Description (20+ chars) required")
 
 # --- Footer --
 st.divider()

@@ -1,0 +1,9 @@
+ID,Date,Type,Severity,Status,Description,Reported By
+8,2024-11-18,Phishing,High,Investigating,CEO impersonation email targeting finance team,analyst
+7,2024-11-15,Malware,Low,Closed,Adware detected on marketing laptop,user
+6,2024-11-12,Insider Threat,High,Open,Unusual data export activity detected,alice
+5,2024-11-10,Phishing,Medium,Resolved,Fake Microsoft login page reported,analyst
+4,2024-11-07,Data Breach,Critical,Investigating,Unauthorised access to customer database,admin
+3,2024-11-05,DDoS,High,Open,Distributed denial of service attack on web portal,alice
+2,2024-11-03,Malware,Critical,Investigating,Ransomware detected on finance server,bob
+1,2024-11-01,Phishing,High,Resolved,Suspicious email with urgent payment request,alice

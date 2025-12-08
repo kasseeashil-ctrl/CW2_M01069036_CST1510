@@ -5,11 +5,10 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
-import random
+import os
 
 from app.services.database_manager import DatabaseManager
 from app.services.ai_assistant import GeminiClient
-from app.models.security_incidents import SecurityIncident
 
 # Page configuration
 st.set_page_config(page_title="Cybersecurity | Intelligence Platform", page_icon="🛡️", layout="wide")
@@ -60,8 +59,8 @@ st.divider()
 with st.sidebar:
     st.header("🔧 Filters")
     severity_filter = st.multiselect("Severity", ["Low", "Medium", "High", "Critical"])
-    status_filter = st.multiselect("Status", ["Open", "Investigating", "Resolved", "Closed"])
-    type_filter = st.multiselect("Type", ["Phishing", "Malware", "DDoS", "Data Breach", "Ransomware", "Insider Threat"])
+    status_filter = st.multiselect("Status", ["Open", "In Progress", "Resolved", "Closed"])
+    type_filter = st.multiselect("Type", ["Phishing", "Malware", "DDoS", "Misconfiguration", "Unauthorized Access"])
     
     st.divider()
     if st.button("🔄 Refresh", use_container_width=True):
@@ -70,24 +69,23 @@ with st.sidebar:
     
     show_add = st.button("➕ New Incident", use_container_width=True, type="primary")
 
-# --- Load Incident Data ---
+# --- Load Incident Data from CSV ---
 @st.cache_data(ttl=60)
 def load_incidents():
-    """Fetch incidents from database with 60-second cache"""
-    rows = db.fetch_all("SELECT id, date, incident_type, severity, status, description, reported_by FROM cyber_incidents ORDER BY date DESC")
-    return [SecurityIncident(r[0], r[1], r[2], r[3], r[4], r[5], r[6]) for r in rows]
+    """Load incidents from CSV file"""
+    csv_path = "DATA/cyber_incidents.csv"
+    if os.path.exists(csv_path):
+        df = pd.read_csv(csv_path)
+        # CSV already has correct column names: ID, Date, Type, Severity, Status, Description, Reported By
+        # Ensure Reported By column exists (handle space in column name)
+        if 'Reported By' not in df.columns and 'Reported_By' not in df.columns:
+            df['Reported By'] = 'System'
+        elif 'Reported_By' in df.columns:
+            df = df.rename(columns={'Reported_By': 'Reported By'})
+        return df
+    return pd.DataFrame()
 
-incidents = load_incidents()
-
-def to_df(data):
-    """Convert incidents to pandas DataFrame for analysis"""
-    return pd.DataFrame([{
-        "ID": i.get_id(), "Date": i.get_date(), "Type": i.get_incident_type(),
-        "Severity": i.get_severity(), "Status": i.get_status(),
-        "Description": i.get_description(), "Reported By": i.get_reported_by()
-    } for i in data])
-
-df = to_df(incidents)
+df = load_incidents()
 
 # Apply sidebar filters
 if not df.empty:
@@ -102,14 +100,14 @@ else:
 st.subheader("📊 Executive Summary")
 m1, m2, m3, m4, m5 = st.columns(5)
 
-total = len(incidents)
-active = len([i for i in incidents if i.is_open()])
-critical = len([i for i in incidents if i.is_critical()])
-resolved = total - active
+total = len(df)
+active = len(df[df["Status"].isin(["Open", "In Progress"])]) if not df.empty else 0
+critical = len(df[df["Severity"] == "Critical"]) if not df.empty else 0
+resolved = len(df[df["Status"].isin(["Resolved", "Closed"])]) if not df.empty else 0
 rate = (resolved / total * 100) if total > 0 else 0
 
 m1.metric("Total Incidents", total)
-m2.metric("Active Threats", active, delta=f"+{random.randint(0,3)}" if active > 0 else None, delta_color="inverse")
+m2.metric("Active Threats", active)
 m3.metric("Critical", critical)
 m4.metric("Resolved", resolved)
 m5.metric("Resolution Rate", f"{rate:.0f}%")
@@ -219,10 +217,13 @@ st.subheader("🔍 Incident Management")
 if not df_f.empty:
     # Incident selection dropdown
     selected_id = st.selectbox("Select Incident", df_f["ID"].tolist(),
-        format_func=lambda x: f"INC-{x:04d} | {df_f[df_f['ID']==x]['Type'].values[0]} | {df_f[df_f['ID']==x]['Severity'].values[0]}")
+        format_func=lambda x: f"INC-{int(x):04d} | {df_f[df_f['ID']==x]['Type'].values[0]} | {df_f[df_f['ID']==x]['Severity'].values[0]}")
     
     # Data table display
-    st.dataframe(df_f, use_container_width=True, hide_index=True)
+    st.dataframe(df_f[['ID', 'Date', 'Type', 'Severity', 'Status', 'Description']], use_container_width=True, hide_index=True)
+    
+    # Get selected incident details
+    selected_incident = df_f[df_f['ID'] == selected_id].iloc[0]
     
     # AI Assistant Section
     if client:
@@ -240,15 +241,22 @@ if not df_f.empty:
         
         # Individual AI analysis handlers
         if btn1:
-            selected = next(i for i in incidents if i.get_id() == selected_id)
+            incident_context = f"""
+Incident ID: {selected_incident['ID']}
+Date: {selected_incident['Date']}
+Type: {selected_incident['Type']}
+Severity: {selected_incident['Severity']}
+Status: {selected_incident['Status']}
+Description: {selected_incident['Description']}
+"""
             messages = [
                 {"role": "system", "content": "You're a cybersecurity analyst. Be concise."},
-                {"role": "user", "content": f"Analyse this incident:\n{selected.get_ai_context()}"}
+                {"role": "user", "content": f"Analyse this incident:\n{incident_context}"}
             ]
             with st.chat_message("assistant"):
                 container = st.empty()
                 full = ""
-                for chunk in client.chat.completions.create(model="gemini-2.0-flash", messages=messages, stream=True):
+                for chunk in client.chat.completions.create(model="gemini-2.0-flash", messages=messages, stream=True, domain="Cybersecurity"):
                     if chunk.choices[0].delta.content:
                         full += chunk.choices[0].delta.content
                         container.markdown(full + "▌")
@@ -268,7 +276,7 @@ if not df_f.empty:
             with st.chat_message("assistant"):
                 container = st.empty()
                 full = ""
-                for chunk in client.chat.completions.create(model="gemini-2.0-flash", messages=messages, stream=True):
+                for chunk in client.chat.completions.create(model="gemini-2.0-flash", messages=messages, stream=True, domain="Cybersecurity"):
                     if chunk.choices[0].delta.content:
                         full += chunk.choices[0].delta.content
                         container.markdown(full + "▌")
@@ -282,7 +290,7 @@ if not df_f.empty:
             with st.chat_message("assistant"):
                 container = st.empty()
                 full = ""
-                for chunk in client.chat.completions.create(model="gemini-2.0-flash", messages=messages, stream=True):
+                for chunk in client.chat.completions.create(model="gemini-2.0-flash", messages=messages, stream=True, domain="Cybersecurity"):
                     if chunk.choices[0].delta.content:
                         full += chunk.choices[0].delta.content
                         container.markdown(full + "▌")
@@ -292,13 +300,13 @@ if not df_f.empty:
         st.divider()
         q = st.chat_input("Ask about security...")
         if q:
-            messages = [{"role": "system", "content": "You're a security assistant."}, {"role": "user", "content": q}]
+            messages = [{"role": "system", "content": "You're a security assistant. Only use cybersecurity incident data from this dashboard."}, {"role": "user", "content": q}]
             with st.chat_message("user"):
                 st.markdown(q)
             with st.chat_message("assistant"):
                 container = st.empty()
                 full = ""
-                for chunk in client.chat.completions.create(model="gemini-2.0-flash", messages=messages, stream=True):
+                for chunk in client.chat.completions.create(model="gemini-2.0-flash", messages=messages, stream=True, domain="Cybersecurity"):
                     if chunk.choices[0].delta.content:
                         full += chunk.choices[0].delta.content
                         container.markdown(full + "▌")
@@ -315,19 +323,36 @@ if show_add:
         c1, c2 = st.columns(2)
         with c1:
             date = st.date_input("Date", datetime.today())
-            inc_type = st.selectbox("Type", ["Phishing", "Malware", "DDoS", "Data Breach", "Ransomware", "Insider Threat", "Other"])
+            inc_type = st.selectbox("Type", ["Phishing", "Malware", "DDoS", "Misconfiguration", "Unauthorized Access", "Other"])
             severity = st.selectbox("Severity", ["Low", "Medium", "High", "Critical"], index=2)
         with c2:
-            status = st.selectbox("Status", ["Open", "Investigating"])
+            status = st.selectbox("Status", ["Open", "In Progress"])
             reported = st.text_input("Reported By", st.session_state.username, disabled=True)
         
         desc = st.text_area("Description", placeholder="Describe the incident...", height=100)
         
         if st.form_submit_button("🚀 Submit", use_container_width=True, type="primary"):
             if desc and len(desc) >= 20:
-                db.execute_query(
-                    "INSERT INTO cyber_incidents (date, incident_type, severity, status, description, reported_by) VALUES (?, ?, ?, ?, ?, ?)",
-                    (str(date), inc_type, severity, status, desc, reported))
+                # Load existing CSV, add new row, save back
+                csv_path = "DATA/cyber_incidents.csv"
+                if os.path.exists(csv_path):
+                    existing_df = pd.read_csv(csv_path)
+                    new_id = existing_df['incident_id'].max() + 1
+                else:
+                    existing_df = pd.DataFrame(columns=['incident_id', 'timestamp', 'severity', 'category', 'status', 'description'])
+                    new_id = 1000
+                
+                new_row = pd.DataFrame([{
+                    'incident_id': new_id,
+                    'timestamp': f"{date} 00:00:00.000000",
+                    'severity': severity,
+                    'category': inc_type,
+                    'status': status,
+                    'description': desc
+                }])
+                updated_df = pd.concat([existing_df, new_row], ignore_index=True)
+                os.makedirs("DATA", exist_ok=True)
+                updated_df.to_csv(csv_path, index=False)
                 st.success("✅ Incident reported!")
                 st.cache_data.clear()
                 st.rerun()
