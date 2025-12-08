@@ -94,7 +94,8 @@ with st.sidebar:
     
     for btn_text, (btn_domain, btn_prompt) in quick_actions.items():
         if btn_domain == "General" or user.can_access_domain(btn_domain.lower().replace(" ", "")):
-            if st.button(btn_text, use_container_width=True, type="primary" if btn_domain == "General" else None):
+            btn_type = "primary" if btn_domain == "General" else "secondary"
+            if st.button(btn_text, use_container_width=True, type=btn_type):
                 action_clicked = btn_text
                 action_domain = btn_domain
                 action_prompt = btn_prompt
