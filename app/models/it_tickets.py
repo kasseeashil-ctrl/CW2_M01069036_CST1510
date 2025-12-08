@@ -10,7 +10,7 @@ class ITTicket:
                  resolved_date: str = None, assigned_to: str = None):
         """Initialise ticket with private attributes"""  # Constructor docstring
         self.__id = ticket_id  # Set private ID attribute (database primary key)
-        self.__ticket_number = ticket_number  # Set private ticket number (human-readable ID)
+        self.__ticket_number = ticket_number  # Set private ticket number 
         #Setting private attributes
         self.__priority = priority 
         self.__status = status 

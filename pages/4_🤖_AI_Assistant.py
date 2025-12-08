@@ -108,7 +108,7 @@ with st.sidebar:
         st.session_state.messages = []
         st.rerun()
 
-# Initialize Chat History
+# Initialise Chat History
 if "messages" not in st.session_state:
     st.session_state.messages = []
 

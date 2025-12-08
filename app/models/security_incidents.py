@@ -69,3 +69,4 @@ Reported By: {self.get_reported_by()}"""
     def __str__(self) -> str:
         # String representation for printing/debugging.
         return f"SecurityIncident(id={self.__id}, type={self.__incident_type}, severity={self.__severity})"
+ 

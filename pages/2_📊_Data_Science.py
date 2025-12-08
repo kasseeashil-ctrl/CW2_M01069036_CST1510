@@ -96,7 +96,7 @@ if not df.empty:
 else:
     df_f = df
 
-# --- Metrics Dashboard ---
+#Metrics Dashboard
 st.subheader("📊 Data Overview")
 m1, m2, m3, m4, m5 = st.columns(5)
 

@@ -235,7 +235,7 @@ with tab_login:
                 else:
                     st.error(f"❌ {message}")
     
-    # demo accounts section
+    # the demo accounts section
     with st.expander("🎯 Demo Accounts", expanded=False):
         st.markdown("""
         | Role | Username | Password |

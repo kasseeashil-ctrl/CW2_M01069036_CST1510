@@ -6,10 +6,7 @@ import pandas as pd
 import google.generativeai as genai
 from typing import Dict, Any
 
-
-# ----------------------------------------------------------------------
 # Dashboard Data Reader
-# ----------------------------------------------------------------------
 
 class DashboardDataReader:
     """Reads and aggregates data from all dashboard CSV files"""
@@ -149,13 +146,9 @@ class DashboardDataReader:
             'itoperations': self.get_itoperations_stats()
         }
 
-
-# ----------------------------------------------------------------------
 # Gemini Client & AI Functions
-# ----------------------------------------------------------------------
-
-def initialize_gemini_client():
-    """Initialize Gemini API"""
+def initialise_gemini_client():
+    """Initialise Gemini API"""
     try:
         api_key = (st.secrets.get('gemini', {}).get('api_key') or 
                   os.environ.get('GEMINI_API_KEY') or 
@@ -166,7 +159,7 @@ def initialize_gemini_client():
         genai.configure(api_key=api_key)
         return True
     except Exception as e:
-        st.error(f"Error initializing Gemini: {e}")
+        st.error(f"Error initialising Gemini: {e}")
         return None
 
 def _generate_response(prompt: str) -> str:
@@ -221,7 +214,7 @@ All Records:
 """
         instruction = config['instruction']
     else:
-        # General - all data
+        # General all data
         all_stats = data_reader.get_all_stats()
         cyber_df = data_reader.get_cybersecurity_df()
         ds_df = data_reader.get_datascience_df()
@@ -251,9 +244,8 @@ If the question cannot be answered from the available data, clearly state that t
     return _generate_response(prompt)
 
 
-# ----------------------------------------------------------------------
+
 # GeminiClient Wrapper
-# ----------------------------------------------------------------------
 
 class GeminiClient:
     """Wrapper providing OpenAI-style interface using Gemini"""
@@ -268,7 +260,7 @@ class GeminiClient:
                 st.error(f"Error initializing Gemini: {e}")
                 self._client_initialized = False
         else:
-            self._client_initialized = (initialize_gemini_client() is not None)
+            self._client_initialized = (initialise_gemini_client() is not None)
         self.chat = self._ChatCompletions(self)
     
     def set_database(self, db_manager):
