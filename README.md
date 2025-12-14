@@ -18,16 +18,16 @@ I've structured the application in layers, which keeps things organised and make
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Presentation Layer                        │
+│                    Presentation Layer                       │
 │         (Streamlit Pages: Home.py, pages/*.py)              │
 ├─────────────────────────────────────────────────────────────┤
-│                     Service Layer                            │
+│                     Service Layer                           │
 │    (AuthManager, DatabaseManager, AIAssistant)              │
 ├─────────────────────────────────────────────────────────────┤
-│                      Model Layer                             │
+│                      Model Layer                            │
 │      (User, SecurityIncident, Dataset, ITTicket)            │
 ├─────────────────────────────────────────────────────────────┤
-│                      Data Layer                              │
+│                      Data Layer                             │
 │           (SQLite Database, Schema Definitions)             │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -582,12 +582,13 @@ CW2_M01069036_CST1510/
 Here's how the tables relate to each other:
 
 ```
+
 ┌─────────────┐     ┌──────────────────┐     ┌─────────────────┐
 │   users     │     │ cyber_incidents  │     │datasets_metadata│
 ├─────────────┤     ├──────────────────┤     ├─────────────────┤
 │ id (PK)     │     │ id (PK)          │     │ id (PK)         │
-│ username    │◄────│ reported_by      │     │ dataset_name    │
-│ password_hash│     │ date             │     │ category        │
+│ username    │     │ reported_by      │     │ dataset_name    │
+│password_hash│  <  │ date             |   > │ category        │
 │ role        │     │ incident_type    │     │ source          │
 └─────────────┘     │ severity         │     │ last_updated    │
                     │ status           │     │ record_count    │
